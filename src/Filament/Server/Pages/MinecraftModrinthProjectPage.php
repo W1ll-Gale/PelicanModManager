@@ -15,6 +15,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -22,6 +23,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 
 class MinecraftModrinthProjectPage extends Page implements HasTable
 {
@@ -85,77 +87,91 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->label(''),
                 TextColumn::make('title')
                     ->searchable()
-                    ->description(function (array $record) {
-                        /** @var Server $server */
-                        $server = Filament::getTenant();
-
-                        $versions = MinecraftModrinth::getModrinthVersions($record['project_id'], $server);
-                        if (count($versions) > 0) {
-                            $version = $versions[0];
-                            $files = $version['files'] ?? [];
-
-                            foreach ($files as $data) {
-                                if ($data['primary']) {
-                                    $size = convert_bytes_to_readable($data['size']);
-
-                                    return "{$version['version_number']} ({$size})";
-                                }
-                            }
-                        }
-
-                        return null;
-                    }, 'above')
-                    ->description(fn (array $record) => (strlen($record['description']) > 120) ? substr($record['description'], 0, 129).'...' : $record['description'], 'below'),
+                    ->description(fn (array $record) => (strlen($record['description']) > 120) ? substr($record['description'], 0, 120).'...' : $record['description']),
                 TextColumn::make('author')
-                    ->url(fn ($state) => "https://modrinth.com/user/$state", true),
+                    ->url(fn ($state) => "https://modrinth.com/user/$state", true)
+                    ->toggleable(),
                 TextColumn::make('downloads')
                     ->icon('tabler-download')
-                    ->numeric(),
+                    ->numeric()
+                    ->toggleable(),
+                TextColumn::make('date_modified')
+                    ->icon('tabler-calendar')
+                    ->formatStateUsing(fn ($state) => Carbon::parse($state, 'UTC')->diffForHumans())
+                    ->tooltip(fn ($state) => Carbon::parse($state, 'UTC')->timezone(user()?->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()))
+                    ->toggleable(),
             ])
             ->recordUrl(fn (array $record) => "https://modrinth.com/{$record['project_type']}/{$record['slug']}", true)
             ->recordActions([
                 Action::make('download')
-                    ->action(function (array $record, DaemonFileRepository $fileRepository) {
+                    ->schema(function (array $record) {
+                        $schema = [];
+
                         /** @var Server $server */
                         $server = Filament::getTenant();
 
-                        $versions = MinecraftModrinth::getModrinthVersions($record['project_id'], $server);
-                        if (count($versions) > 0) {
-                            $version = $versions[0];
-                            $files = $version['files'] ?? [];
+                        $versions = array_slice(MinecraftModrinth::getModrinthVersions($record['project_id'], $server), 0, 10);
+                        foreach ($versions as $versionData) {
+                            $files = $versionData['files'] ?? [];
+                            $primaryFile = null;
 
-                            foreach ($files as $data) {
-                                if ($data['primary']) {
-                                    $url = $data['url'];
-
-                                    try {
-                                        $fileRepository->setServer($server)->pull($url, MinecraftModrinth::getModrinthProjectType($server)->getFolder());
-
-                                        Notification::make()
-                                            ->title('Download started')
-                                            ->body($version['name'])
-                                            ->success()
-                                            ->send();
-                                    } catch (Exception $exception) {
-                                        report($exception);
-
-                                        Notification::make()
-                                            ->title('Download could not be started')
-                                            ->body($exception->getMessage())
-                                            ->danger()
-                                            ->send();
-                                    }
-
-                                    return;
+                            foreach ($files as $fileData) {
+                                if ($fileData['primary']) {
+                                    $primaryFile = $fileData;
+                                    break;
                                 }
                             }
+
+                            $schema[] = Section::make($versionData['name'])
+                                ->description($versionData['version_number'] . ($primaryFile ? ' (' . convert_bytes_to_readable($primaryFile['size']) . ')' : ' (No file found)'))
+                                ->collapsed(!$versionData['featured'])
+                                ->collapsible()
+                                ->icon($versionData['version_type'] === 'alpha' ? 'tabler-circle-letter-a' : ($versionData['version_type'] === 'beta' ? 'tabler-circle-letter-b' : 'tabler-circle-letter-r'))
+                                ->iconColor($versionData['version_type'] === 'alpha' ? 'danger' : ($versionData['version_type'] === 'beta' ? 'warning' : 'success'))
+                                ->columns(3)
+                                ->schema([
+                                    TextEntry::make('type')
+                                        ->badge()
+                                        ->color($versionData['version_type'] === 'alpha' ? 'danger' : ($versionData['version_type'] === 'beta' ? 'warning' : 'success'))
+                                        ->state($versionData['version_type']),
+                                    TextEntry::make('downloads')
+                                        ->badge()
+                                        ->state($versionData['downloads']),
+                                    TextEntry::make('published')
+                                        ->badge()
+                                        ->state(Carbon::parse($versionData['date_published'], 'UTC')->diffForHumans())
+                                        ->tooltip(Carbon::parse($versionData['date_published'], 'UTC')->timezone(user()?->timezone ?? 'UTC')->format('M j, Y H:i:s')),
+                                    TextEntry::make('changelog')
+                                        ->columnSpanFull()
+                                        ->markdown()
+                                        ->state($versionData['changelog']),
+                                ])
+                                ->headerActions([
+                                    Action::make('download')
+                                        ->visible(!is_null($primaryFile))
+                                        ->action(function (DaemonFileRepository $fileRepository) use ($server, $versionData, $primaryFile) {
+                                            try {
+                                                $fileRepository->setServer($server)->pull($primaryFile['url'], MinecraftModrinth::getModrinthProjectType($server)->getFolder());
+
+                                                Notification::make()
+                                                    ->title('Download started')
+                                                    ->body($versionData['name'])
+                                                    ->success()
+                                                    ->send();
+                                            } catch (Exception $exception) {
+                                                report($exception);
+
+                                                Notification::make()
+                                                    ->title('Download could not be started')
+                                                    ->body($exception->getMessage())
+                                                    ->danger()
+                                                    ->send();
+                                            }
+                                        }),
+                                ]);
                         }
 
-                        Notification::make()
-                            ->title('Download could not be started')
-                            ->body('No (compatible) version found.')
-                            ->danger()
-                            ->send();
+                        return $schema;
                     }),
             ]);
     }

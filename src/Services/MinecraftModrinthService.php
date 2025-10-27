@@ -102,13 +102,15 @@ class MinecraftModrinthService
     /** @return array<int, mixed> */
     public function getModrinthVersions(string $projectId, Server $server): array
     {
+        $minecraftVersion = $this->getMinecraftVersion($server);
+        $minecraftLoader = $this->getMinecraftLoader($server);
+
         $data = [
-            'featured' => true,
-            'game_versions' => $this->getMinecraftVersion($server),
-            'loaders' => $this->getMinecraftLoader($server),
+            'game_versions' => "[\"$minecraftVersion\"]",
+            'loaders' => "[\"$minecraftLoader\"]",
         ];
 
-        return cache()->remember("modrinth_versions:$projectId", now()->addMinutes(30), function () use ($projectId, $data) {
+        return cache()->remember("modrinth_versions:$projectId:$minecraftVersion:$minecraftLoader", now()->addMinutes(30), function () use ($projectId, $data) {
             try {
                 return Http::asJson()
                     ->timeout(5)

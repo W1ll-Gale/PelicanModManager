@@ -98,7 +98,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 TextColumn::make('date_modified')
                     ->icon('tabler-calendar')
                     ->formatStateUsing(fn ($state) => Carbon::parse($state, 'UTC')->diffForHumans())
-                    ->tooltip(fn ($state) => Carbon::parse($state, 'UTC')->timezone(user()?->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()))
+                    ->tooltip(fn ($state) => Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()))
                     ->toggleable(),
             ])
             ->recordUrl(fn (array $record) => "https://modrinth.com/{$record['project_type']}/{$record['slug']}", true)
@@ -140,7 +140,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                     TextEntry::make('published')
                                         ->badge()
                                         ->state(Carbon::parse($versionData['date_published'], 'UTC')->diffForHumans())
-                                        ->tooltip(Carbon::parse($versionData['date_published'], 'UTC')->timezone(user()?->timezone ?? 'UTC')->format('M j, Y H:i:s')),
+                                        ->tooltip(Carbon::parse($versionData['date_published'], 'UTC')->timezone(user()->timezone ?? 'UTC')->format('M j, Y H:i:s')),
                                     TextEntry::make('changelog')
                                         ->columnSpanFull()
                                         ->markdown()

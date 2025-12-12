@@ -11,7 +11,7 @@ class MinecraftModrinthService
 {
     public function getMinecraftVersion(Server $server): ?string
     {
-        return $server->variables()->where('env_variable', 'MINECRAFT_VERSION')->orWhere('env_variable', 'MC_VERSION')->first()?->server_value;
+        return $server->variables()->where(fn ($builder) => $builder->where('env_variable', 'MINECRAFT_VERSION')->orWhere('env_variable', 'MC_VERSION'))->first()?->server_value;
     }
 
     public function getMinecraftLoader(Server $server): ?string

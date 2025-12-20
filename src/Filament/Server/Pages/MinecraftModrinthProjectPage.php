@@ -208,7 +208,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             ->state(function (DaemonFileRepository $fileRepository) use ($server) {
                                 try {
                                     return collect($fileRepository->setServer($server)->getDirectory(MinecraftModrinth::getModrinthProjectType($server)->getFolder()))
-                                        ->filter(fn ($file) => $file['mimetype'] === 'application/jar' || str($file['name'])->endsWith('.jar'))
+                                        ->filter(fn ($file) => $file['mime_type'] === 'application/jar' || str($file['name'])->endsWith('.jar'))
                                         ->count();
                                 } catch (Exception $exception) {
                                     report($exception);

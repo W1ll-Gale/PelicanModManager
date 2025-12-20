@@ -82,11 +82,15 @@ class MinecraftModrinthService
             'facets' => "[[\"categories:$minecraftLoader\"],[\"versions:$minecraftVersion\"],[\"project_type:{$projectType->value}\"]]",
         ];
 
+        $key = "modrinth_projects:{$projectType->value}:$minecraftVersion:$minecraftLoader:$page";
+
         if ($search) {
             $data['query'] = $search;
+
+            $key .= ":$search";
         }
 
-        return cache()->remember("modrinth_projects:{$projectType->value}:$minecraftVersion:$minecraftLoader:$page", now()->addMinutes(30), function () use ($data) {
+        return cache()->remember($key, now()->addMinutes(30), function () use ($data) {
             try {
                 return Http::asJson()
                     ->timeout(5)

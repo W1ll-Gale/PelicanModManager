@@ -207,8 +207,14 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             ->label(fn () => 'Installed ' . MinecraftModrinth::getModrinthProjectType($server)->getLabel())
                             ->state(function (DaemonFileRepository $fileRepository) use ($server) {
                                 try {
-                                    return collect($fileRepository->setServer($server)->getDirectory(MinecraftModrinth::getModrinthProjectType($server)->getFolder()))
-                                        ->filter(fn ($file) => $file['mime_type'] === 'application/jar' || str($file['name'])->endsWith('.jar'))
+                                    $files = $fileRepository->setServer($server)->getDirectory(MinecraftModrinth::getModrinthProjectType($server)->getFolder());
+
+                                    if (isset($files['error'])) {
+                                        throw new Exception($files['error']);
+                                    }
+
+                                    return collect($files)
+                                        ->filter(fn ($file) => $file['mime'] === 'application/jar' || str($file['name'])->lower()->endsWith('.jar'))
                                         ->count();
                                 } catch (Exception $exception) {
                                     report($exception);

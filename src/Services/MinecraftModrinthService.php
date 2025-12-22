@@ -25,8 +25,9 @@ class MinecraftModrinthService
     public function getModrinthProjects(Server $server, int $page = 1, ?string $search = null): array
     {
         $projectType = ModrinthProjectType::fromServer($server)?->value;
+        $minecraftLoader = MinecraftLoader::fromServer($server)?->value;
 
-        if (!$projectType) {
+        if (!$projectType || !$minecraftLoader) {
             return [
                 'hits' => [],
                 'total_hits' => 0,
@@ -34,7 +35,6 @@ class MinecraftModrinthService
         }
 
         $minecraftVersion = $this->getMinecraftVersion($server);
-        $minecraftLoader = MinecraftLoader::fromServer($server)->value;
 
         $data = [
             'offset' => ($page - 1) * 20,
@@ -72,8 +72,13 @@ class MinecraftModrinthService
     /** @return array<int, mixed> */
     public function getModrinthVersions(string $projectId, Server $server): array
     {
+        $minecraftLoader = MinecraftLoader::fromServer($server)?->value;
+
+        if (!$minecraftLoader) {
+            return [];
+        }
+
         $minecraftVersion = $this->getMinecraftVersion($server);
-        $minecraftLoader = MinecraftLoader::fromServer($server)->value;
 
         $data = [
             'game_versions' => "[\"$minecraftVersion\"]",

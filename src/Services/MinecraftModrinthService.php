@@ -14,7 +14,7 @@ class MinecraftModrinthService
     {
         $version = $server->variables()->where(fn ($builder) => $builder->where('env_variable', 'MINECRAFT_VERSION')->orWhere('env_variable', 'MC_VERSION'))->first()?->server_value;
 
-        if ($version === 'latest') {
+        if (!$version || $version === 'latest') {
             return config('minecraft-modrinth.latest_minecraft_version');
         }
 

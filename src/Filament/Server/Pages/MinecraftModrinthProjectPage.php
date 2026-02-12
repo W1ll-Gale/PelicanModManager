@@ -187,7 +187,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
         return [
             Action::make('open_folder')
-                ->label(fn () => trans('minecraft-modrinth::strings.page.open_folder', ['folder' => $folder]))
+                ->tooltip(fn () => trans('minecraft-modrinth::strings.page.open_folder', ['folder' => $folder]))
+                ->icon('tabler-folder-open')
                 ->url(fn () => ListFiles::getUrl(['path' => $folder]), true),
         ];
     }

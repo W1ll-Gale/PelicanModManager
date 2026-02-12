@@ -106,6 +106,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             ->recordUrl(fn (array $record) => "https://modrinth.com/{$record['project_type']}/{$record['slug']}", true)
             ->recordActions([
                 Action::make('download')
+                    ->tooltip(trans('minecraft-modrinth::strings.actions.download'))
+                    ->icon('tabler-download')
+                    ->modalSubmitAction(false)
                     ->schema(function (array $record) {
                         $schema = [];
 
@@ -149,7 +152,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                         ->state($versionData['changelog']),
                                 ])
                                 ->headerActions([
-                                    Action::make('download')
+                                    Action::make('exclude_download')
+                                        ->label(trans('minecraft-modrinth::strings.actions.download'))
                                         ->visible(!is_null($primaryFile))
                                         ->action(function (DaemonFileRepository $fileRepository) use ($server, $versionData, $primaryFile) {
                                             try {

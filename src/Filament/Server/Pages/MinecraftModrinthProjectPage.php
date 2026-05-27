@@ -1439,6 +1439,17 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                      position: relative;
                                      overflow: hidden;
                                  }
+
+                                 /* Strip Filament's default TextEntry card styling from the parents of our card */
+                                 div:has(> .modpack-import-card),
+                                 div:has(> div > .modpack-import-card),
+                                 .fi-in-text:has(.modpack-import-card),
+                                 .fi-in-entry-wrp:has(.modpack-import-card) {
+                                     border: none !important;
+                                     background: transparent !important;
+                                     padding: 0 !important;
+                                     box-shadow: none !important;
+                                 }
                                  
                                  .modpack-import-card::before {
                                      content: '';

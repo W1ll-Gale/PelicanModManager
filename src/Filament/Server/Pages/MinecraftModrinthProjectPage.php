@@ -709,12 +709,16 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 ->schema([
                     FileUpload::make('mrpack')
                         ->label(trans('minecraft-modrinth::strings.page.mrpack_file'))
-                        ->acceptedFileTypes(['application/octet-stream', 'application/zip', '.mrpack'])
                         ->required(),
                 ])
                 ->action(function (array $data) use ($server) {
                     try {
                         $filePath = $data['mrpack'];
+
+                        if (!Str::endsWith(strtolower($filePath), ['.mrpack', '.zip'])) {
+                            throw new Exception('Invalid file type. Only .mrpack and .zip files are accepted.');
+                        }
+
                         $absolutePath = null;
                         $disk = null;
 

@@ -907,7 +907,16 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     FileUpload::make('file')
                         ->label(trans('minecraft-modrinth::strings.page.mod_file'))
                         ->required()
-                        ->extraInputAttributes(['accept' => '.mrpack,.zip,.jar']),
+                        ->acceptedFileTypes([
+                            'application/zip',
+                            'application/x-zip-compressed',
+                            'application/octet-stream',
+                            'application/java-archive',
+                            'application/x-java-archive',
+                            '.zip',
+                            '.jar',
+                            '.mrpack',
+                        ]),
                 ])
                 ->action(function (array $data) use ($server) {
                     try {

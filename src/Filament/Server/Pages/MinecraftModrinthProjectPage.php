@@ -1099,7 +1099,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->visible(fn () => $this->activeTab === 'installed'),
             ])
             ->bulkActions([
-                \Filament\Tables\Actions\BulkAction::make('delete')
+                \Filament\Actions\BulkAction::make('delete')
                     ->label(trans('minecraft-modrinth::strings.actions.uninstall'))
                     ->icon('tabler-trash')
                     ->color('danger')

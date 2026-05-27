@@ -301,9 +301,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $files = [];
                     }
 
-                    // Filter for .jar files
+                    // Filter for .jar and .jar.disabled files
                     $jarFiles = collect($files)
-                        ->filter(fn ($file) => $file['mime'] === 'application/jar' || str($file['name'])->lower()->endsWith('.jar'))
+                        ->filter(function ($file) {
+                            $name = strtolower($file['name']);
+                            return str_ends_with($name, '.jar') || str_ends_with($name, '.jar.disabled');
+                        })
                         ->toArray();
 
                     $combinedItems = [];
@@ -311,8 +314,11 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     // 2. Map disk files to Modrinth metadata or synthetic local entries
                     foreach ($jarFiles as $file) {
                         $filename = $file['name'];
+                        $isDisabled = str_ends_with(strtolower($filename), '.disabled');
+                        $cleanFilename = str_replace('.disabled', '', $filename);
+                        
                         $matchedMetadata = collect($installedModsMetadata)
-                            ->first(fn ($mod) => strcasecmp($mod['filename'], $filename) === 0);
+                            ->first(fn ($mod) => strcasecmp(str_replace('.disabled', '', $mod['filename']), $cleanFilename) === 0);
 
                         if ($matchedMetadata) {
                             $combinedItems[] = [
@@ -323,13 +329,14 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 'installed_at' => $matchedMetadata['installed_at'],
                                 'author' => $matchedMetadata['author'] ?? 'Unknown',
                                 'is_local' => false,
+                                'is_disabled' => $isDisabled,
                                 'metadata' => $matchedMetadata,
                             ];
                         } else {
                             $combinedItems[] = [
                                 'project_id' => 'local_' . md5($filename),
                                 'slug' => '',
-                                'title' => basename($filename, '.jar'),
+                                'title' => basename($cleanFilename, '.jar'),
                                 'description' => 'Local mod file (' . $filename . ')',
                                 'icon_url' => null,
                                 'author' => 'Unknown',
@@ -339,6 +346,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 'unavailable' => true,
                                 'filename' => $filename,
                                 'is_local' => true,
+                                'is_disabled' => $isDisabled,
                             ];
                         }
                     }
@@ -350,6 +358,30 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             return str_contains(strtolower($item['title']), $searchLower)
                                 || str_contains(strtolower($item['slug'] ?? ''), $searchLower)
                                 || str_contains(strtolower($item['filename']), $searchLower);
+                        }));
+                    }
+
+                    // Apply status filter if present
+                    $statusFilter = $this->tableFilters['status']['value'] ?? 'all';
+                    if ($statusFilter && $statusFilter !== 'all') {
+                        $combinedItems = array_values(array_filter($combinedItems, function (array $item) use ($statusFilter) {
+                            $isEnabled = empty($item['is_disabled']);
+                            if ($statusFilter === 'enabled') {
+                                return $isEnabled;
+                            } elseif ($statusFilter === 'disabled') {
+                                return !$isEnabled;
+                            } elseif ($statusFilter === 'updates') {
+                                if ($item['is_local']) {
+                                    return false;
+                                }
+                                $versions = $this->getCachedVersions($item['project_id']);
+                                if (empty($versions)) {
+                                    return false;
+                                }
+                                $installedMod = $item['metadata'];
+                                return $installedMod['version_id'] !== $versions[0]['id'];
+                            }
+                            return true;
                         }));
                     }
 
@@ -513,6 +545,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 ImageColumn::make('icon_url')
                     ->label(''),
                 TextColumn::make('title')
+                    ->label(fn () => $this->activeTab === 'installed' ? 'Project' : 'Title')
                     ->searchable()
                     ->sortable()
                     ->wrap()
@@ -520,17 +553,36 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $title = e($record['title'] ?? '');
                         $author = e($record['author'] ?? '');
                         
-                        if ($author && $author !== 'Unknown') {
+                        if ($this->activeTab === 'installed') {
                             $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                            $avatarUrl = $author === 'Unknown'
+                                ? 'https://cdn.modrinth.com/assets/images/default_avatar.png'
+                                : "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
+                            
                             return new HtmlString("
-                                <div class='flex flex-wrap items-baseline gap-x-2'>
-                                    <span class='font-bold text-gray-200' style='font-size: 1.05rem;'>{$title}</span>
-                                    <span class='text-xs text-gray-400 font-normal'>by <a href='{$authorUrl}' target='_blank' class='text-primary-400 hover:underline'>{$author}</a></span>
+                                <div style='display: flex; align-items: center; gap: 12px;'>
+                                    <div style='display: flex; flex-direction: column; gap: 4px;'>
+                                        <span style='font-size: 15px; font-weight: 700; color: #f3f4f6;'>{$title}</span>
+                                        <div style='display: flex; align-items: center; gap: 6px;'>
+                                            <img src='{$avatarUrl}' style='width: 16px; height: 16px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);' />
+                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #9ca3af; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author}</a>
+                                        </div>
+                                    </div>
                                 </div>
                             ");
                         }
                         
-                        return new HtmlString("<span class='font-bold text-gray-200' style='font-size: 1.05rem;'>{$title}</span>");
+                        if ($author && $author !== 'Unknown') {
+                            $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                            return new HtmlString("
+                                <div style='display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: nowrap;'>
+                                    <span style='font-size: 16px; font-weight: 700; color: #f3f4f6; white-space: nowrap;'>{$title}</span>
+                                    <span style='font-size: 13px; color: #9ca3af; font-weight: 400; white-space: nowrap;'>by <a href='{$authorUrl}' target='_blank' style='color: #3b82f6; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author}</a></span>
+                                </div>
+                            ");
+                        }
+                        
+                        return new HtmlString("<span style='font-size: 16px; font-weight: 700; color: #f3f4f6;'>{$title}</span>");
                     })
                     ->description(function (array $record) {
                         if ($this->activeTab !== 'all') {
@@ -565,17 +617,79 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             </div>
                         ");
                     }),
+                TextColumn::make('version')
+                    ->label('Version')
+                    ->visible(fn () => $this->activeTab === 'installed')
+                    ->wrap()
+                    ->formatStateUsing(function (array $record) {
+                        $version = '';
+                        if (!empty($record['is_local'])) {
+                            $version = 'Local';
+                        } else {
+                            $version = $record['version_number'] ?? ($record['metadata']['version_number'] ?? 'Unknown');
+                        }
+                        
+                        $filename = e($record['filename'] ?? '');
+                        
+                        return new HtmlString("
+                            <div style='display: flex; flex-direction: column; gap: 4px;'>
+                                <span style='font-size: 14px; font-weight: 700; color: #f3f4f6;'>{$version}</span>
+                                <span style='font-size: 12px; color: #6b7280; font-family: monospace;'>{$filename}</span>
+                            </div>
+                        ");
+                    }),
+                TextColumn::make('is_enabled')
+                    ->label('Status')
+                    ->visible(fn () => $this->activeTab === 'installed')
+                    ->formatStateUsing(function (array $record) {
+                        $projectId = e($record['project_id']);
+                        $filename = e($record['filename']);
+                        $isEnabled = empty($record['is_disabled']);
+                        $activeColor = $isEnabled ? '#10b981' : '#4b5563';
+                        $switchId = 'switch_' . md5($projectId);
+                        
+                        return new HtmlString("
+                            <div style='display: flex; align-items: center;' wire:click.stop=\"toggleModStatus('{$projectId}', '{$filename}', " . ($isEnabled ? 'true' : 'false') . ")\">
+                                <style>
+                                    .toggle-switch-{$switchId} {
+                                        position: relative;
+                                        width: 44px;
+                                        height: 24px;
+                                        background-color: {$activeColor};
+                                        border-radius: 9999px;
+                                        cursor: pointer;
+                                        transition: background-color 0.2s ease-in-out;
+                                    }
+                                    .toggle-switch-{$switchId}::after {
+                                        content: '';
+                                        position: absolute;
+                                        top: 2px;
+                                        left: " . ($isEnabled ? '22px' : '2px') . ";
+                                        width: 20px;
+                                        height: 20px;
+                                        background-color: #ffffff;
+                                        border-radius: 50%;
+                                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                                        transition: left 0.2s ease-in-out;
+                                    }
+                                </style>
+                                <div class='toggle-switch-{$switchId}'></div>
+                            </div>
+                        ");
+                    }),
                 TextColumn::make('downloads')
                     ->icon('tabler-download')
                     ->numeric()
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->visible(fn () => $this->activeTab === 'all'),
                 TextColumn::make('date_modified')
                     ->icon('tabler-calendar')
                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state, 'UTC')->diffForHumans() : '')
                     ->tooltip(fn ($state) => $state ? Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()) : '')
                     ->sortable()
-                    ->toggleable(),
+                    ->toggleable()
+                    ->visible(fn () => $this->activeTab === 'all'),
             ])
             ->recordUrl(function (array $record) {
                 if (!empty($record['unavailable'])) {
@@ -707,6 +821,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->color('success')
                     ->tooltip(trans('minecraft-modrinth::strings.actions.install_latest'))
                     ->visible(function (array $record) {
+                        if (!empty($record['is_local']) || !empty($record['unavailable'])) {
+                            return false;
+                        }
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
                         return is_null($installedMod);
@@ -959,6 +1076,98 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 ->send();
                         }
                     }),
+            ])
+            ->filters([
+                \Filament\Tables\Filters\SelectFilter::make('status')
+                    ->label('Filter Status')
+                    ->options(function () {
+                        $stats = $this->getInstalledModsStats();
+                        $options = ['all' => 'All'];
+                        
+                        if ($stats['has_disabled']) {
+                            $options['enabled'] = 'Enabled';
+                            $options['disabled'] = 'Disabled';
+                        }
+                        
+                        if ($stats['has_updates']) {
+                            $options['updates'] = 'Updates';
+                        }
+                        
+                        return $options;
+                    })
+                    ->default('all')
+                    ->visible(fn () => $this->activeTab === 'installed'),
+            ])
+            ->bulkActions([
+                \Filament\Tables\Actions\BulkAction::make('delete')
+                    ->label(trans('minecraft-modrinth::strings.actions.uninstall'))
+                    ->icon('tabler-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->visible(fn () => $this->activeTab === 'installed')
+                    ->action(function (\Illuminate\Support\Collection $records) {
+                        try {
+                            /** @var Server $server */
+                            $server = Filament::getTenant();
+
+                            $type = ModrinthProjectType::fromServer($server);
+                            if (!$type) {
+                                throw new Exception('Server does not support Modrinth mods or plugins');
+                            }
+
+                            $folder = $type->getFolder();
+                            $filesToDelete = [];
+                            $projectIdsToRemove = [];
+
+                            foreach ($records as $record) {
+                                if (!empty($record['is_local'])) {
+                                    $filename = $record['filename'];
+                                } else {
+                                    $installedMod = $this->getInstalledMod($record['project_id']);
+                                    if ($installedMod) {
+                                        $filename = $installedMod['filename'];
+                                        $projectIdsToRemove[] = $record['project_id'];
+                                    } else {
+                                        $filename = $record['filename'] ?? null;
+                                    }
+                                }
+
+                                if ($filename) {
+                                    $filesToDelete[] = $folder . '/' . $this->validateFilename($filename);
+                                }
+                            }
+
+                            if (!empty($filesToDelete)) {
+                                Http::daemon($server->node)
+                                    ->post("/api/servers/{$server->uuid}/files/delete", [
+                                        'root' => '/',
+                                        'files' => $filesToDelete,
+                                    ])
+                                    ->throw();
+                            }
+
+                            foreach ($projectIdsToRemove as $pId) {
+                                MinecraftModrinth::removeModMetadata($server, $pId);
+                            }
+
+                            $this->installedModsMetadata = null;
+                            $this->versionsCache = [];
+                            $this->js('$wire.$refresh()');
+
+                            Notification::make()
+                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_success'))
+                                ->body('Successfully uninstalled selected mods.')
+                                ->success()
+                                ->send();
+                        } catch (Exception $e) {
+                            report($e);
+                            Notification::make()
+                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_failed'))
+                                ->body($e->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    })
             ]);
     }
 
@@ -1488,6 +1697,119 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    public function toggleModStatus(string $projectId, string $filename, bool $currentlyEnabled): void
+    {
+        try {
+            /** @var Server $server */
+            $server = Filament::getTenant();
+
+            $type = ModrinthProjectType::fromServer($server);
+            if (!$type) {
+                throw new Exception('Server does not support Modrinth mods or plugins');
+            }
+
+            $folder = $type->getFolder();
+            $oldFilename = $this->validateFilename($filename);
+
+            if ($currentlyEnabled) {
+                $newFilename = $oldFilename . '.disabled';
+            } else {
+                $newFilename = str_replace('.disabled', '', $oldFilename);
+            }
+
+            Http::daemon($server->node)
+                ->post("/api/servers/{$server->uuid}/files/rename", [
+                    'root' => '/',
+                    'files' => [
+                        [
+                            'from' => $folder . '/' . $oldFilename,
+                            'to' => $folder . '/' . $newFilename,
+                        ]
+                    ]
+                ])
+                ->throw();
+
+            $cleanProjectId = str_starts_with($projectId, 'local_') ? null : $projectId;
+            if ($cleanProjectId) {
+                $installedMod = $this->getInstalledMod($cleanProjectId);
+                if ($installedMod) {
+                    MinecraftModrinth::saveModMetadata(
+                        $server,
+                        $cleanProjectId,
+                        $installedMod['project_slug'],
+                        $installedMod['project_title'],
+                        $installedMod['version_id'],
+                        $installedMod['version_number'],
+                        $newFilename,
+                        $installedMod['author'] ?? null
+                    );
+                }
+            }
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+            $this->js('$wire.$refresh()');
+
+            Notification::make()
+                ->title('Mod status updated')
+                ->body('Successfully ' . ($currentlyEnabled ? 'disabled' : 'enabled') . ' mod.')
+                ->success()
+                ->send();
+        } catch (Exception $e) {
+            report($e);
+            Notification::make()
+                ->title('Failed to toggle mod status')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    protected function getInstalledModsStats(): array
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) {
+            return ['has_disabled' => false, 'has_updates' => false];
+        }
+
+        $fileRepository = app(DaemonFileRepository::class);
+        $installedModsMetadata = $this->getInstalledModsMetadata();
+
+        try {
+            $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
+            if (isset($files['error'])) {
+                $files = [];
+            }
+        } catch (Exception $e) {
+            $files = [];
+        }
+
+        $hasDisabled = false;
+        foreach ($files as $file) {
+            if (str_ends_with(strtolower($file['name']), '.jar.disabled')) {
+                $hasDisabled = true;
+                break;
+            }
+        }
+
+        $hasUpdates = false;
+        foreach ($installedModsMetadata as $mod) {
+            $versions = $this->getCachedVersions($mod['project_id']);
+            if (!empty($versions) && $mod['version_id'] !== $versions[0]['id']) {
+                $hasUpdates = true;
+                break;
+            }
+        }
+
+        return [
+            'has_disabled' => $hasDisabled,
+            'has_updates' => $hasUpdates,
+        ];
     }
 
     public function content(Schema $schema): Schema

@@ -19,7 +19,7 @@ return [
         'view_all' => 'Alle',
         'view_installed' => 'Installiert',
         'mod_unavailable' => 'Dieser Mod/Plugin ist auf Modrinth nicht mehr verfügbar',
-        'mrpack_file' => 'Modpack-Datei (.mrpack)',
+        'mod_file' => 'Mod- oder Modpack-Datei (.jar, .mrpack, .zip)',
     ],
 
     'table' => [
@@ -46,8 +46,8 @@ return [
         'update' => 'Aktualisieren',
         'uninstall' => 'Deinstallieren',
         'versions' => 'Versionsauswahl',
-        'upload_mrpack' => 'Modpack hochladen (.mrpack)',
-        'upload_mrpack_tooltip' => 'Eine Modrinth Modpack (.mrpack) Datei hochladen und installieren',
+        'upload_mod' => 'Mod/Pack hochladen',
+        'upload_mod_tooltip' => 'Lade eine einzelne .jar Mod-Datei oder ein Modrinth .mrpack / .zip Modpack hoch',
     ],
 
     'modals' => [

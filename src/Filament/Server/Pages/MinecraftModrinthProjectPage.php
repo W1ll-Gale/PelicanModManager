@@ -282,19 +282,197 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 $server = Filament::getTenant();
 
                 if ($this->activeTab === 'installed') {
-                    $installedMods = $this->getInstalledModsMetadata();
+                    $type = ModrinthProjectType::fromServer($server);
+                    if (!$type) {
+                        return new LengthAwarePaginator([], 0, 20, $page);
+                    }
 
+                    $fileRepository = app(DaemonFileRepository::class);
+                    $installedModsMetadata = $this->getInstalledModsMetadata();
+
+                    // 1. Get actual files in the mods/plugins folder
+                    try {
+                        $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
+                        if (isset($files['error'])) {
+                            throw new Exception($files['error']);
+                        }
+                    } catch (Exception $e) {
+                        report($e);
+                        $files = [];
+                    }
+
+                    // Filter for .jar files
+                    $jarFiles = collect($files)
+                        ->filter(fn ($file) => $file['mime'] === 'application/jar' || str($file['name'])->lower()->endsWith('.jar'))
+                        ->toArray();
+
+                    $combinedItems = [];
+
+                    // 2. Map disk files to Modrinth metadata or synthetic local entries
+                    foreach ($jarFiles as $file) {
+                        $filename = $file['name'];
+                        $matchedMetadata = collect($installedModsMetadata)
+                            ->first(fn ($mod) => strcasecmp($mod['filename'], $filename) === 0);
+
+                        if ($matchedMetadata) {
+                            $combinedItems[] = [
+                                'project_id' => $matchedMetadata['project_id'],
+                                'slug' => $matchedMetadata['project_slug'],
+                                'title' => $matchedMetadata['project_title'],
+                                'filename' => $filename,
+                                'installed_at' => $matchedMetadata['installed_at'],
+                                'author' => $matchedMetadata['author'] ?? 'Unknown',
+                                'is_local' => false,
+                                'metadata' => $matchedMetadata,
+                            ];
+                        } else {
+                            $combinedItems[] = [
+                                'project_id' => 'local_' . md5($filename),
+                                'slug' => '',
+                                'title' => basename($filename, '.jar'),
+                                'description' => 'Local mod file (' . $filename . ')',
+                                'icon_url' => null,
+                                'author' => 'Unknown',
+                                'downloads' => 0,
+                                'date_modified' => $file['modified'] ?? '',
+                                'project_type' => $type->value,
+                                'unavailable' => true,
+                                'filename' => $filename,
+                                'is_local' => true,
+                            ];
+                        }
+                    }
+
+                    // 3. Apply search query if present
                     if ($search) {
                         $searchLower = strtolower($search);
-                        $installedMods = array_values(array_filter($installedMods, function (array $mod) use ($searchLower) {
-                            return str_contains(strtolower($mod['project_title']), $searchLower)
-                                || str_contains(strtolower($mod['project_slug']), $searchLower);
+                        $combinedItems = array_values(array_filter($combinedItems, function (array $item) use ($searchLower) {
+                            return str_contains(strtolower($item['title']), $searchLower)
+                                || str_contains(strtolower($item['slug'] ?? ''), $searchLower)
+                                || str_contains(strtolower($item['filename']), $searchLower);
                         }));
                     }
 
-                    $projects = MinecraftModrinth::getInstalledModsFromModrinth($installedMods, $page);
+                    $totalItems = count($combinedItems);
 
-                    return new LengthAwarePaginator($projects, count($installedMods), 20, $page);
+                    // 4. Slice items for current page
+                    $perPage = 20;
+                    $pageItems = array_slice($combinedItems, ($page - 1) * $perPage, $perPage);
+
+                    // 5. Query Modrinth API in bulk for Modrinth-managed items on this page
+                    $pageRegisteredMods = collect($pageItems)->filter(fn ($item) => empty($item['is_local']))->toArray();
+                    $pageLocalMods = collect($pageItems)->filter(fn ($item) => !empty($item['is_local']))->toArray();
+
+                    $resolvedRegistered = [];
+                    if (!empty($pageRegisteredMods)) {
+                        $ids = collect($pageRegisteredMods)->pluck('project_id')->unique()->values()->toArray();
+                        try {
+                            $response = Http::asJson()
+                                ->timeout(10)
+                                ->connectTimeout(5)
+                                ->throw()
+                                ->get('https://api.modrinth.com/v2/projects', [
+                                    'ids' => json_encode($ids),
+                                ])
+                                ->json();
+
+                            $modrinthMap = [];
+                            if (is_array($response)) {
+                                foreach ($response as $proj) {
+                                    if (isset($proj['id'])) {
+                                        $modrinthMap[$proj['id']] = $proj;
+                                    }
+                                }
+                            }
+
+                            foreach ($pageRegisteredMods as $item) {
+                                $projectId = $item['project_id'];
+                                $mod = $item['metadata'];
+                                if (isset($modrinthMap[$projectId])) {
+                                    $project = $modrinthMap[$projectId];
+                                    $project['project_id'] = $project['id'];
+                                    if (isset($project['updated']) && !isset($project['date_modified'])) {
+                                        $project['date_modified'] = $project['updated'];
+                                    }
+                                    if (isset($mod['author']) && !isset($project['author'])) {
+                                        $project['author'] = $mod['author'];
+                                    }
+                                    $project['filename'] = $item['filename'];
+                                    $project['is_local'] = false;
+                                    $resolvedRegistered[] = $project;
+                                } else {
+                                    // Fallback if mod is no longer available on Modrinth
+                                    $resolvedRegistered[] = [
+                                        'project_id' => $mod['project_id'],
+                                        'slug' => $mod['project_slug'],
+                                        'title' => $mod['project_title'],
+                                        'description' => trans('minecraft-modrinth::strings.page.mod_unavailable'),
+                                        'icon_url' => null,
+                                        'author' => $mod['author'] ?? '',
+                                        'downloads' => 0,
+                                        'date_modified' => $mod['installed_at'],
+                                        'project_type' => '',
+                                        'unavailable' => true,
+                                        'filename' => $item['filename'],
+                                        'is_local' => false,
+                                    ];
+                                }
+                            }
+                        } catch (Exception $e) {
+                            report($e);
+                            // Fallback to metadata details for display
+                            foreach ($pageRegisteredMods as $item) {
+                                $mod = $item['metadata'];
+                                $resolvedRegistered[] = [
+                                    'project_id' => $mod['project_id'],
+                                    'slug' => $mod['project_slug'],
+                                    'title' => $mod['project_title'],
+                                    'description' => 'Modrinth mod (' . $item['filename'] . ')',
+                                    'icon_url' => null,
+                                    'author' => $mod['author'] ?? 'Unknown',
+                                    'downloads' => 0,
+                                    'date_modified' => $mod['installed_at'],
+                                    'project_type' => '',
+                                    'unavailable' => true,
+                                    'filename' => $item['filename'],
+                                    'is_local' => false,
+                                ];
+                            }
+                        }
+                    }
+
+                    // 6. Merge resolved Modrinth projects and local mods back together in the original page order
+                    $finalRecords = [];
+                    foreach ($pageItems as $item) {
+                        if ($item['is_local']) {
+                            $finalRecords[] = $item;
+                        } else {
+                            $matchedResolved = collect($resolvedRegistered)
+                                ->first(fn ($res) => $res['project_id'] === $item['project_id'] && strcasecmp($res['filename'], $item['filename']) === 0);
+                            if ($matchedResolved) {
+                                $finalRecords[] = $matchedResolved;
+                            } else {
+                                // Ultimate fallback
+                                $mod = $item['metadata'];
+                                $finalRecords[] = [
+                                    'project_id' => $mod['project_id'],
+                                    'slug' => $mod['project_slug'],
+                                    'title' => $mod['project_title'],
+                                    'description' => 'Modrinth mod (' . $item['filename'] . ')',
+                                    'icon_url' => null,
+                                    'author' => $mod['author'] ?? 'Unknown',
+                                    'downloads' => 0,
+                                    'date_modified' => $mod['installed_at'],
+                                    'project_type' => '',
+                                    'unavailable' => true,
+                                    'filename' => $item['filename'],
+                                    'is_local' => false,
+                                ];
+                            }
+                        }
+                    }
+
+                    return new LengthAwarePaginator($finalRecords, $totalItems, $perPage, $page);
                 } else {
                     $response = MinecraftModrinth::getProjects($server, $page, $search);
 
@@ -608,6 +786,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->color('danger')
                     ->tooltip(trans('minecraft-modrinth::strings.actions.uninstall'))
                     ->visible(function (array $record) {
+                        if (!empty($record['is_local'])) {
+                            return true;
+                        }
                         return !is_null($this->getInstalledMod($record['project_id']));
                     })
                     ->requiresConfirmation()
@@ -618,13 +799,17 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             /** @var Server $server */
                             $server = Filament::getTenant();
 
-                            $installedMod = $this->getInstalledMod($record['project_id']);
-
-                            if (!$installedMod) {
-                                throw new Exception('Mod not found in metadata');
+                            if (!empty($record['is_local'])) {
+                                $filename = $record['filename'];
+                            } else {
+                                $installedMod = $this->getInstalledMod($record['project_id']);
+                                if (!$installedMod) {
+                                    throw new Exception('Mod not found in metadata');
+                                }
+                                $filename = $installedMod['filename'];
                             }
 
-                            $safeFilename = $this->validateFilename($installedMod['filename']);
+                            $safeFilename = $this->validateFilename($filename);
 
                             $type = ModrinthProjectType::fromServer($server);
                             if (!$type) {
@@ -640,21 +825,26 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 ])
                                 ->throw();
 
-                            $metadataRemoved = MinecraftModrinth::removeModMetadata($server, $record['project_id']);
+                            if (empty($record['is_local'])) {
+                                $metadataRemoved = MinecraftModrinth::removeModMetadata($server, $record['project_id']);
 
-                            if (!$metadataRemoved) {
-                                Log::warning('Failed to remove mod metadata after successful file deletion', [
-                                    'project_id' => $record['project_id'],
-                                    'server_id' => $server->id,
-                                ]);
+                                if (!$metadataRemoved) {
+                                    Log::warning('Failed to remove mod metadata after successful file deletion', [
+                                        'project_id' => $record['project_id'],
+                                        'server_id' => $server->id,
+                                    ]);
 
-                                if (is_array($this->installedModsMetadata)) {
-                                    $this->installedModsMetadata = array_values(
-                                        array_filter($this->installedModsMetadata, fn ($mod) => $mod['project_id'] !== $record['project_id'])
-                                    );
+                                    if (is_array($this->installedModsMetadata)) {
+                                        $this->installedModsMetadata = array_values(
+                                            array_filter($this->installedModsMetadata, fn ($mod) => $mod['project_id'] !== $record['project_id'])
+                                        );
+                                    }
+
+                                    unset($this->versionsCache[$record['project_id']]);
+                                } else {
+                                    $this->installedModsMetadata = null;
+                                    $this->versionsCache = [];
                                 }
-
-                                unset($this->versionsCache[$record['project_id']]);
                             } else {
                                 $this->installedModsMetadata = null;
                                 $this->versionsCache = [];
@@ -708,22 +898,23 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 ->tooltip(fn () => trans('minecraft-modrinth::strings.page.open_folder', ['folder' => $folder]))
                 ->icon('tabler-folder-open')
                 ->url(fn () => ListFiles::getUrl(['path' => $folder]), true),
-            Action::make('upload_mrpack')
-                ->label(trans('minecraft-modrinth::strings.actions.upload_mrpack'))
-                ->tooltip(trans('minecraft-modrinth::strings.actions.upload_mrpack_tooltip'))
+            Action::make('upload_mod')
+                ->label(trans('minecraft-modrinth::strings.actions.upload_mod'))
+                ->tooltip(trans('minecraft-modrinth::strings.actions.upload_mod_tooltip'))
                 ->icon('tabler-upload')
                 ->color('primary')
                 ->schema([
-                    FileUpload::make('mrpack')
-                        ->label(trans('minecraft-modrinth::strings.page.mrpack_file'))
-                        ->required(),
+                    FileUpload::make('file')
+                        ->label(trans('minecraft-modrinth::strings.page.mod_file'))
+                        ->required()
+                        ->extraInputAttributes(['accept' => '.mrpack,.zip,.jar']),
                 ])
                 ->action(function (array $data) use ($server) {
                     try {
-                        $filePath = $data['mrpack'];
+                        $filePath = $data['file'];
 
-                        if (!Str::endsWith(strtolower($filePath), ['.mrpack', '.zip'])) {
-                            throw new Exception('Invalid file type. Only .mrpack and .zip files are accepted.');
+                        if (!Str::endsWith(strtolower($filePath), ['.mrpack', '.zip', '.jar'])) {
+                            throw new Exception('Invalid file type. Only .jar, .mrpack, and .zip files are accepted.');
                         }
 
                         $absolutePath = null;
@@ -755,35 +946,137 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             throw new Exception('Uploaded file not found.');
                         }
 
-                        $tempDest = storage_path('app/modpack_import_' . $server->id . '.zip');
-                        if (file_exists($tempDest)) {
-                            unlink($tempDest);
+                        $type = ModrinthProjectType::fromServer($server);
+                        if (!$type) {
+                            throw new Exception('Server does not support Modrinth mods or plugins');
                         }
 
-                        if (!copy($absolutePath, $tempDest)) {
-                            throw new Exception('Failed to prepare pack file.');
-                        }
+                        $folder = $type->getFolder();
 
-                        if ($disk) {
-                            try {
-                                $disk->delete($filePath);
-                            } catch (Exception $e) {
-                                // Ignore
+                        if (Str::endsWith(strtolower($filePath), ['.jar'])) {
+                            $filename = basename($absolutePath);
+                            $safeFilename = $this->validateFilename($filename);
+                            $sha1 = sha1_file($absolutePath);
+
+                            $jarContent = file_get_contents($absolutePath);
+                            if ($jarContent === false) {
+                                throw new Exception('Failed to read uploaded jar file.');
                             }
+
+                            $fileRepository = app(DaemonFileRepository::class);
+                            $fileRepository
+                                ->setServer($server)
+                                ->putContent($folder . '/' . $safeFilename, $jarContent)
+                                ->throw();
+
+                            if ($disk) {
+                                try {
+                                    $disk->delete($filePath);
+                                } catch (Exception $e) {}
+                            }
+
+                            $resolved = false;
+                            $projectName = basename($safeFilename, '.jar');
+                            $projectSlug = '';
+                            $projectId = '';
+                            $versionId = '';
+                            $versionNumber = '';
+                            $author = null;
+
+                            if ($sha1) {
+                                try {
+                                    $versionResponse = Http::asJson()
+                                        ->timeout(10)
+                                        ->connectTimeout(5)
+                                        ->get("https://api.modrinth.com/v2/version_file/{$sha1}?algorithm=sha1");
+
+                                    if ($versionResponse->successful()) {
+                                        $versionData = $versionResponse->json();
+                                        $pId = $versionData['project_id'] ?? null;
+                                        $vId = $versionData['id'] ?? null;
+                                        $vNum = $versionData['version_number'] ?? null;
+
+                                        if ($pId && $vId) {
+                                            $projectResponse = Http::asJson()
+                                                ->timeout(10)
+                                                ->connectTimeout(5)
+                                                ->get("https://api.modrinth.com/v2/project/{$pId}");
+
+                                            if ($projectResponse->successful()) {
+                                                $projectData = $projectResponse->json();
+                                                $projectId = $pId;
+                                                $projectSlug = $projectData['slug'] ?? '';
+                                                $projectName = $projectData['title'] ?? $projectName;
+                                                $versionId = $vId;
+                                                $versionNumber = $vNum ?? '';
+
+                                                MinecraftModrinth::saveModMetadata(
+                                                    $server,
+                                                    $projectId,
+                                                    $projectSlug,
+                                                    $projectName,
+                                                    $versionId,
+                                                    $versionNumber,
+                                                    $safeFilename,
+                                                    $author
+                                                );
+                                                $resolved = true;
+                                            }
+                                        }
+                                    }
+                                } catch (Exception $apiException) {
+                                    Log::warning('Modrinth API upload hash lookup failed: ' . $apiException->getMessage());
+                                }
+                            }
+
+                            $this->installedModsMetadata = null;
+                            $this->versionsCache = [];
+                            $this->js('$wire.$refresh()');
+
+                            if ($resolved) {
+                                Notification::make()
+                                    ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
+                                    ->body("Successfully uploaded, verified against Modrinth, and registered as a managed mod: {$projectName}")
+                                    ->success()
+                                    ->send();
+                            } else {
+                                Notification::make()
+                                    ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
+                                    ->body("Successfully uploaded as local mod: {$safeFilename}")
+                                    ->success()
+                                    ->send();
+                            }
+                        } else {
+                            $tempDest = storage_path('app/modpack_import_' . $server->id . '.zip');
+                            if (file_exists($tempDest)) {
+                                unlink($tempDest);
+                            }
+
+                            if (!copy($absolutePath, $tempDest)) {
+                                throw new Exception('Failed to prepare pack file.');
+                            }
+
+                            if ($disk) {
+                                try {
+                                    $disk->delete($filePath);
+                                } catch (Exception $e) {
+                                    // Ignore
+                                }
+                            }
+
+                            $this->isImporting = true;
+                            $this->importProgress = 5;
+                            $this->importStatus = 'Initializing modpack installation...';
+                            $this->importFilePath = $tempDest;
+                            $this->importFilesToDownload = null;
+                            $this->importDownloadedMods = [];
+
+                            Notification::make()
+                                ->title(trans('minecraft-modrinth::strings.actions.upload_mod'))
+                                ->body('Modpack installation started. Please keep this page open to track progress.')
+                                ->info()
+                                ->send();
                         }
-
-                        $this->isImporting = true;
-                        $this->importProgress = 5;
-                        $this->importStatus = 'Initializing modpack installation...';
-                        $this->importFilePath = $tempDest;
-                        $this->importFilesToDownload = null;
-                        $this->importDownloadedMods = [];
-
-                        Notification::make()
-                            ->title(trans('minecraft-modrinth::strings.actions.upload_mrpack'))
-                            ->body('Modpack installation started. Please keep this page open to track progress.')
-                            ->info()
-                            ->send();
 
                     } catch (Exception $exception) {
                         report($exception);

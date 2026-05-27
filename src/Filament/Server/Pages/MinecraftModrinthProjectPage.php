@@ -754,14 +754,18 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             throw new Exception('Failed to open zip archive.');
                         }
 
-                        // Auto-detect base path containing index.json
+                        // Auto-detect base path containing modrinth.index.json or index.json
                         $indexJsonPath = null;
                         $basePath = '';
                         for ($i = 0; $i < $zip->numFiles; $i++) {
                             $entryName = $zip->getNameIndex($i);
-                            if ($entryName === 'index.json') {
-                                $indexJsonPath = 'index.json';
+                            if ($entryName === 'modrinth.index.json' || $entryName === 'index.json') {
+                                $indexJsonPath = $entryName;
                                 $basePath = '';
+                                break;
+                            } elseif (str_ends_with($entryName, '/modrinth.index.json')) {
+                                $indexJsonPath = $entryName;
+                                $basePath = substr($entryName, 0, -strlen('modrinth.index.json'));
                                 break;
                             } elseif (str_ends_with($entryName, '/index.json')) {
                                 $indexJsonPath = $entryName;
@@ -776,13 +780,13 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 $filesInZip[] = $zip->getNameIndex($i);
                             }
                             $zip->close();
-                            throw new Exception('Missing index.json in .mrpack. Files in zip: ' . implode(', ', $filesInZip));
+                            throw new Exception('Missing modrinth.index.json in .mrpack. Files in zip: ' . implode(', ', $filesInZip));
                         }
 
                         $indexJsonContent = $zip->getFromName($indexJsonPath);
                         if ($indexJsonContent === false) {
                             $zip->close();
-                            throw new Exception('Failed to read index.json content.');
+                            throw new Exception('Failed to read index content.');
                         }
 
                         $indexData = json_decode($indexJsonContent, true);

@@ -19,6 +19,7 @@ return [
         'view_all' => 'All',
         'view_installed' => 'Installed',
         'mod_unavailable' => 'This mod/plugin is no longer available on Modrinth',
+        'mrpack_file' => 'Modpack File (.mrpack)',
     ],
 
     'table' => [
@@ -45,6 +46,8 @@ return [
         'update' => 'Update',
         'uninstall' => 'Uninstall',
         'versions' => 'Version Selection',
+        'upload_mrpack' => 'Upload Modpack (.mrpack)',
+        'upload_mrpack_tooltip' => 'Upload and install a Modrinth Modpack (.mrpack) file',
     ],
 
     'modals' => [
@@ -67,5 +70,9 @@ return [
         'uninstall_success_body' => 'Successfully uninstalled :name',
         'uninstall_failed' => 'Uninstall failed',
         'uninstall_failed_body' => 'An error occurred during uninstallation. Please try again or contact support if the issue persists.',
+        'mrpack_upload_success' => 'Modpack installation completed',
+        'mrpack_upload_success_body' => 'Successfully installed modpack and added its mods.',
+        'mrpack_upload_failed' => 'Modpack installation failed',
+        'mrpack_upload_failed_body' => 'An error occurred while installing the modpack: :error',
     ],
 ];

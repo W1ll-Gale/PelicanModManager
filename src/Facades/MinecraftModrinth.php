@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static array<int, ModrinthVersion> getProjectVersions(string $projectId, Server $server)
  * @method static array<int, InstalledModMetadata> getInstalledModsMetadata(Server $server)
  * @method static bool saveModMetadata(Server $server, string $projectId, string $projectSlug, string $projectTitle, string $versionId, string $versionNumber, string $filename, ?string $author = null)
+ * @method static bool saveModsMetadata(Server $server, array $mods)
  * @method static bool removeModMetadata(Server $server, string $projectId)
  * @method static InstalledModMetadata|null getInstalledMod(Server $server, string $projectId)
  * @method static bool isUpdateAvailable(array{version_id: string, version_number: string} $installedMod, array<int, array{id: string, version_number: string}> $availableVersions)

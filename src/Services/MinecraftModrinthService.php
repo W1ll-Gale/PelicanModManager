@@ -335,6 +335,64 @@ class MinecraftModrinthService
         }
     }
 
+    /**
+     * @param  array<int, array{project_id: string, project_slug: string, project_title: string, version_id: string, version_number: string, filename: string, author?: string}>  $mods
+     */
+    public function saveModsMetadata(Server $server, array $mods): bool
+    {
+        if (empty($mods)) {
+            return true;
+        }
+
+        try {
+            return Cache::lock("modrinth_metadata:{$server->id}", 10)->block(5, function () use ($server, $mods) {
+                $fileRepository = app(DaemonFileRepository::class);
+
+                $installed = $this->getInstalledModsMetadata($server);
+                $installedMap = [];
+                foreach ($installed as $mod) {
+                    $installedMap[$mod['project_id']] = $mod;
+                }
+
+                $now = now()->toIso8601String();
+                foreach ($mods as $mod) {
+                    $projectId = $mod['project_id'];
+                    $modEntry = [
+                        'project_id' => $projectId,
+                        'project_slug' => $mod['project_slug'],
+                        'project_title' => $mod['project_title'],
+                        'version_id' => $mod['version_id'],
+                        'version_number' => $mod['version_number'],
+                        'filename' => $mod['filename'],
+                        'installed_at' => $now,
+                    ];
+
+                    if (isset($mod['author']) && $mod['author'] !== null) {
+                        $modEntry['author'] = $mod['author'];
+                    }
+
+                    $installedMap[$projectId] = $modEntry;
+                }
+
+                $metadata = [
+                    'installed_mods' => array_values($installedMap),
+                ];
+
+                $metadataPath = $this->getMetadataFilePath($server);
+                $response = $fileRepository->setServer($server)->putContent(
+                    $metadataPath,
+                    json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
+                );
+
+                return !$response->failed();
+            }) === true;
+        } catch (Exception $exception) {
+            report($exception);
+
+            return false;
+        }
+    }
+
     public function saveModMetadata(
         Server $server,
         string $projectId,

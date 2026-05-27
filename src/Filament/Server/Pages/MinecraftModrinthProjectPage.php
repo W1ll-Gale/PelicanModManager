@@ -709,7 +709,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 ->schema([
                     FileUpload::make('mrpack')
                         ->label(trans('minecraft-modrinth::strings.page.mrpack_file'))
-                        ->acceptedFileTypes(['application/zip', 'application/x-zip-compressed', '.zip'])
+                        ->extraInputAttributes(['accept' => '.mrpack,.zip'])
                         ->required(),
                 ])
                 ->action(function (array $data) use ($server) {

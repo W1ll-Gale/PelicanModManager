@@ -1423,22 +1423,144 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->hiddenLabel()
                     ->columnSpanFull()
                     ->state(fn () => new HtmlString(<<<HTML
-                        <div wire:poll.1s="processImportTick" class="p-6 bg-gray-900 border border-primary-500/30 rounded-xl shadow-xl flex flex-col gap-4">
-                            <div class="flex justify-between items-center">
-                                <div class="flex items-center gap-3">
-                                    <span class="relative flex h-3 w-3">
-                                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
-                                      <span class="relative inline-flex rounded-full h-3 w-3 bg-primary-500"></span>
-                                    </span>
-                                    <span class="text-sm font-semibold text-gray-200">Installing Modpack</span>
-                                </div>
-                                <span class="text-xs text-primary-400 font-mono">{$this->importProgress}%</span>
-                            </div>
-                            <div class="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
-                                <div class="bg-primary-500 h-full rounded-full transition-all duration-500 ease-out" style="width: {$this->importProgress}%"></div>
-                            </div>
-                            <p class="text-xs text-gray-400 italic">Status: <span class="text-gray-300 font-medium">{$this->importStatus}</span></p>
-                        </div>
+                         <div wire:poll.1s="processImportTick" class="modpack-import-card">
+                             <style>
+                                 .modpack-import-card {
+                                     background: linear-gradient(135deg, rgba(20, 20, 25, 0.95) 0%, rgba(30, 30, 40, 0.95) 100%);
+                                     border: 1px solid rgba(255, 255, 255, 0.08);
+                                     border-radius: 16px;
+                                     padding: 24px;
+                                     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+                                     margin-bottom: 24px;
+                                     font-family: inherit;
+                                     display: flex;
+                                     flex-direction: column;
+                                     gap: 16px;
+                                     position: relative;
+                                     overflow: hidden;
+                                 }
+                                 
+                                 .modpack-import-card::before {
+                                     content: '';
+                                     position: absolute;
+                                     top: 0;
+                                     left: 0;
+                                     right: 0;
+                                     height: 3px;
+                                     background: linear-gradient(90deg, #10b981, #3b82f6);
+                                     opacity: 0.8;
+                                 }
+
+                                 .modpack-import-header {
+                                     display: flex;
+                                     justify-content: space-between;
+                                     align-items: center;
+                                 }
+
+                                 .modpack-import-title-group {
+                                     display: flex;
+                                     align-items: center;
+                                     gap: 12px;
+                                 }
+
+                                 .modpack-import-spinner {
+                                     width: 10px;
+                                     height: 10px;
+                                     background-color: #10b981;
+                                     border-radius: 50%;
+                                     position: relative;
+                                     box-shadow: 0 0 10px #10b981;
+                                 }
+
+                                 .modpack-import-spinner::after {
+                                     content: '';
+                                     position: absolute;
+                                     width: 10px;
+                                     height: 10px;
+                                     background-color: #10b981;
+                                     border-radius: 50%;
+                                     top: 0;
+                                     left: 0;
+                                     animation: modpack-pulse 1.8s infinite ease-in-out;
+                                 }
+
+                                 @keyframes modpack-pulse {
+                                     0% {
+                                         transform: scale(1);
+                                         opacity: 1;
+                                     }
+                                     100% {
+                                         transform: scale(2.8);
+                                         opacity: 0;
+                                     }
+                                 }
+
+                                 .modpack-import-title {
+                                     font-size: 15px;
+                                     font-weight: 600;
+                                     color: #f3f4f6;
+                                     letter-spacing: -0.01em;
+                                 }
+
+                                 .modpack-import-percentage {
+                                     font-size: 14px;
+                                     font-weight: 700;
+                                     color: #10b981;
+                                     font-family: monospace;
+                                     background: rgba(16, 185, 129, 0.1);
+                                     padding: 2px 8px;
+                                     border-radius: 6px;
+                                     border: 1px solid rgba(16, 185, 129, 0.15);
+                                 }
+
+                                 .modpack-import-progress-container {
+                                     width: 100%;
+                                     height: 10px;
+                                     background: rgba(255, 255, 255, 0.05);
+                                     border-radius: 9999px;
+                                     overflow: hidden;
+                                     border: 1px solid rgba(255, 255, 255, 0.03);
+                                     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+                                 }
+
+                                 .modpack-import-progress-bar {
+                                     height: 100%;
+                                     background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);
+                                     border-radius: 9999px;
+                                     box-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+                                     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                                 }
+
+                                 .modpack-import-status {
+                                     font-size: 13px;
+                                     color: #9ca3af;
+                                     display: flex;
+                                     align-items: center;
+                                     gap: 6px;
+                                 }
+
+                                 .modpack-import-status-label {
+                                     font-weight: 500;
+                                     color: #d1d5db;
+                                 }
+                             </style>
+
+                             <div class="modpack-import-header">
+                                 <div class="modpack-import-title-group">
+                                     <div class="modpack-import-spinner"></div>
+                                     <span class="modpack-import-title">Installing Modpack</span>
+                                 </div>
+                                 <span class="modpack-import-percentage">{$this->importProgress}%</span>
+                             </div>
+                             
+                             <div class="modpack-import-progress-container">
+                                 <div class="modpack-import-progress-bar" style="width: {$this->importProgress}%"></div>
+                             </div>
+                             
+                             <div class="modpack-import-status">
+                                 Status: <span class="modpack-import-status-label">{$this->importStatus}</span>
+                             </div>
+                         </div>
                     HTML)),
                 Grid::make(3)
                     ->schema([

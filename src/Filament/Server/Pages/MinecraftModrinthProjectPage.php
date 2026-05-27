@@ -754,10 +754,35 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             throw new Exception('Failed to open zip archive.');
                         }
 
-                        $indexJsonContent = $zip->getFromName('index.json');
+                        // Auto-detect base path containing index.json
+                        $indexJsonPath = null;
+                        $basePath = '';
+                        for ($i = 0; $i < $zip->numFiles; $i++) {
+                            $entryName = $zip->getNameIndex($i);
+                            if ($entryName === 'index.json') {
+                                $indexJsonPath = 'index.json';
+                                $basePath = '';
+                                break;
+                            } elseif (str_ends_with($entryName, '/index.json')) {
+                                $indexJsonPath = $entryName;
+                                $basePath = substr($entryName, 0, -strlen('index.json'));
+                                break;
+                            }
+                        }
+
+                        if ($indexJsonPath === null) {
+                            $filesInZip = [];
+                            for ($i = 0; $i < min($zip->numFiles, 15); $i++) {
+                                $filesInZip[] = $zip->getNameIndex($i);
+                            }
+                            $zip->close();
+                            throw new Exception('Missing index.json in .mrpack. Files in zip: ' . implode(', ', $filesInZip));
+                        }
+
+                        $indexJsonContent = $zip->getFromName($indexJsonPath);
                         if ($indexJsonContent === false) {
                             $zip->close();
-                            throw new Exception('Missing index.json in .mrpack.');
+                            throw new Exception('Failed to read index.json content.');
                         }
 
                         $indexData = json_decode($indexJsonContent, true);
@@ -784,11 +809,21 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 continue;
                             }
 
-                            if (str_starts_with($entryName, 'overrides/')) {
-                                $target = substr($entryName, strlen('overrides/'));
+                            // Strip the base path
+                            if ($basePath !== '') {
+                                if (!str_starts_with($entryName, $basePath)) {
+                                    continue;
+                                }
+                                $relativeEntryName = substr($entryName, strlen($basePath));
+                            } else {
+                                $relativeEntryName = $entryName;
+                            }
+
+                            if (str_starts_with($relativeEntryName, 'overrides/')) {
+                                $target = substr($relativeEntryName, strlen('overrides/'));
                                 $overrides[$target] = $entryName;
-                            } elseif (str_starts_with($entryName, 'server-overrides/')) {
-                                $target = substr($entryName, strlen('server-overrides/'));
+                            } elseif (str_starts_with($relativeEntryName, 'server-overrides/')) {
+                                $target = substr($relativeEntryName, strlen('server-overrides/'));
                                 $serverOverrides[$target] = $entryName;
                             }
                         }

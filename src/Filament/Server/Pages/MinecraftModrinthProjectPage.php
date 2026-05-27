@@ -353,6 +353,33 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         }));
                     }
 
+                    // Apply sorting if a sort column is active
+                    $sortColumn = $this->getTableSortColumn();
+                    $sortDirection = $this->getTableSortDirection();
+                    if ($sortColumn) {
+                        $descending = $sortDirection === 'desc';
+                        $combinedItems = collect($combinedItems)
+                            ->sortBy(function ($item) use ($sortColumn) {
+                                switch ($sortColumn) {
+                                    case 'title':
+                                        return strtolower($item['title'] ?? '');
+                                    case 'author':
+                                        return strtolower($item['author'] ?? '');
+                                    case 'downloads':
+                                        return (int)($item['downloads'] ?? 0);
+                                    case 'date_modified':
+                                        $dateStr = $item['is_local'] 
+                                            ? ($item['date_modified'] ?? '') 
+                                            : ($item['metadata']['installed_at'] ?? '');
+                                        return $dateStr ? Carbon::parse($dateStr)->timestamp : 0;
+                                    default:
+                                        return strtolower($item['title'] ?? '');
+                                }
+                            }, SORT_REGULAR, $descending)
+                            ->values()
+                            ->toArray();
+                    }
+
                     $totalItems = count($combinedItems);
 
                     // 4. Slice items for current page
@@ -474,7 +501,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
                     return new LengthAwarePaginator($finalRecords, $totalItems, $perPage, $page);
                 } else {
-                    $response = MinecraftModrinth::getProjects($server, $page, $search);
+                    $sortColumn = $this->getTableSortColumn();
+                    $sortDirection = $this->getTableSortDirection();
+                    $response = MinecraftModrinth::getProjects($server, $page, $search, $sortColumn, $sortDirection);
 
                     return new LengthAwarePaginator($response['hits'], $response['total_hits'], 20, $page);
                 }
@@ -485,18 +514,22 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->label(''),
                 TextColumn::make('title')
                     ->searchable()
+                    ->sortable()
                     ->description(fn (array $record) => (strlen($record['description']) > 120) ? substr($record['description'], 0, 120).'...' : $record['description']),
                 TextColumn::make('author')
                     ->url(fn ($state) => "https://modrinth.com/user/$state", true)
+                    ->sortable()
                     ->toggleable(),
                 TextColumn::make('downloads')
                     ->icon('tabler-download')
                     ->numeric()
+                    ->sortable()
                     ->toggleable(),
                 TextColumn::make('date_modified')
                     ->icon('tabler-calendar')
                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state, 'UTC')->diffForHumans() : '')
                     ->tooltip(fn ($state) => $state ? Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()) : '')
+                    ->sortable()
                     ->toggleable(),
             ])
             ->recordUrl(function (array $record) {

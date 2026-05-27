@@ -93,8 +93,13 @@ class MinecraftModrinthService
     }
 
     /** @return array{hits: array<int, array<string, mixed>>, total_hits: int} */
-    public function getProjects(Server $server, int $page = 1, ?string $search = null): array
-    {
+    public function getProjects(
+        Server $server,
+        int $page = 1,
+        ?string $search = null,
+        ?string $sortColumn = null,
+        ?string $sortDirection = null
+    ): array {
         $projectType = ModrinthProjectType::fromServer($server)?->value;
         $minecraftLoader = $this->getLoaderFromServer($server);
 
@@ -114,6 +119,12 @@ class MinecraftModrinthService
             'facets' => "[[\"categories:$minecraftLoader\"],[\"versions:$minecraftVersion\"],[\"project_type:{$projectType}\"]]",
         ];
 
+        if ($sortColumn === 'downloads') {
+            $data['index'] = 'downloads';
+        } elseif ($sortColumn === 'date_modified') {
+            $data['index'] = 'updated';
+        }
+
         $key = "modrinth_projects:{$projectType}:$minecraftVersion:$minecraftLoader:$page";
 
         if ($search) {
@@ -122,7 +133,11 @@ class MinecraftModrinthService
             $key .= ":$search";
         }
 
-        return cache()->remember($key, now()->addMinutes(30), function () use ($data) {
+        if ($sortColumn) {
+            $key .= ":{$sortColumn}:{$sortDirection}";
+        }
+
+        $response = cache()->remember($key, now()->addMinutes(30), function () use ($data) {
             try {
                 return Http::asJson()
                     ->timeout(5)
@@ -139,6 +154,25 @@ class MinecraftModrinthService
                 ];
             }
         });
+
+        if ($sortColumn === 'title' || $sortColumn === 'author') {
+            $descending = $sortDirection === 'desc';
+            if (isset($response['hits']) && is_array($response['hits'])) {
+                $hits = collect($response['hits'])
+                    ->sortBy(function ($item) use ($sortColumn) {
+                        if ($sortColumn === 'title') {
+                            return strtolower($item['title'] ?? '');
+                        } else {
+                            return strtolower($item['author'] ?? '');
+                        }
+                    }, SORT_REGULAR, $descending)
+                    ->values()
+                    ->toArray();
+                $response['hits'] = $hits;
+            }
+        }
+
+        return $response;
     }
 
     /**

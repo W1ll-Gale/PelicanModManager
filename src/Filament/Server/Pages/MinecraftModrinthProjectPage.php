@@ -544,9 +544,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             })
             ->paginated([20])
             ->columns([
-                ImageColumn::make('icon_url')
-                    ->label('')
-                    ->visible(false),
                 TextColumn::make('title')
                     ->label(fn () => $this->activeTab === 'installed' ? 'Project' : 'Title')
                     ->searchable()
@@ -623,14 +620,18 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 flex-shrink: 0 !important;
                             }
                             
-                            /* Muted grey color for secondary column cells (downloads, date_modified, version) */
+                            /* Hide downloads and date modified column cells visually on 'all' tab */
                             .fi-ta-row > td.fi-ta-col-downloads,
                             .fi-ta-row > td.fi-ta-col-date_modified,
                             .fi-ta-row > td.fi-ta-col-date-modified,
-                            .fi-ta-row > td.fi-ta-col-version,
                             .fi-ta-row > td.fi-ta-cell-downloads,
                             .fi-ta-row > td.fi-ta-cell-date_modified,
-                            .fi-ta-row > td.fi-ta-cell-date-modified,
+                            .fi-ta-row > td.fi-ta-cell-date-modified {
+                                display: none !important;
+                            }
+
+                            /* Style the version cell on 'installed' tab */
+                            .fi-ta-row > td.fi-ta-col-version,
                             .fi-ta-row > td.fi-ta-cell-version {
                                 flex-shrink: 0 !important;
                                 margin-left: 24px !important;
@@ -809,17 +810,60 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 4px; max-width: 750px; word-break: break-word;'>{$description}</div>";
                         }
                         
+                        // Dynamic statistics formatting for 'all' tab vertical stack
+                        $downloads = (int)($record['downloads'] ?? 0);
+                        $downloadsFormatted = '';
+                        if ($downloads >= 1000000) {
+                            $downloadsFormatted = round($downloads / 1000000, 2) . 'M';
+                        } elseif ($downloads >= 1000) {
+                            $downloadsFormatted = round($downloads / 1000, 1) . 'K';
+                        } else {
+                            $downloadsFormatted = $downloads;
+                        }
+
+                        $follows = (int)($record['follows'] ?? 0);
+                        $followsFormatted = '';
+                        if ($follows >= 1000000) {
+                            $followsFormatted = round($follows / 1000000, 2) . 'M';
+                        } elseif ($follows >= 1000) {
+                            $followsFormatted = round($follows / 1000, 1) . 'K';
+                        } else {
+                            $followsFormatted = $follows;
+                        }
+
+                        $dateModified = $record['date_modified'] ?? null;
+                        $dateFormatted = '';
+                        if ($dateModified) {
+                            $dateFormatted = Carbon::parse($dateModified, 'UTC')->diffForHumans();
+                        }
+                        
                         return new HtmlString("
                             {$styleHtml}
-                            <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0;'>
+                            <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0; width: 100%;'>
                                 <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
-                                <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;'>
+                                <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; flex: 1; min-width: 0;'>
                                     <div style='display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;'>
                                         <span style='font-size: 18px; font-weight: 700; color: #ffffff; transition: color 0.15s ease;' onmouseover=\"this.style.color='#10b981'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</span>
                                         {$authorHtml}
                                     </div>
                                     {$descHtml}
                                     {$tagHtml}
+                                </div>
+                                <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: 24px; flex-shrink: 0; color: #a1a1aa; font-size: 13px; font-weight: 500; padding-top: 4px;'>
+                                    <div style='display: flex; align-items: center; gap: 12px;'>
+                                        <div style='display: flex; align-items: center; gap: 4px;' title='Downloads'>
+                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
+                                            <span>{$downloadsFormatted}</span>
+                                        </div>
+                                        <div style='display: flex; align-items: center; gap: 4px;' title='Followers'>
+                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
+                                            <span>{$followsFormatted}</span>
+                                        </div>
+                                    </div>
+                                    <div style='display: flex; align-items: center; gap: 4px;' title='Last updated'>
+                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
+                                        <span>{$dateFormatted}</span>
+                                    </div>
                                 </div>
                             </div>
                         ");

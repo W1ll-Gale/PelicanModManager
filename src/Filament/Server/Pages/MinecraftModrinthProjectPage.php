@@ -515,11 +515,56 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 TextColumn::make('title')
                     ->searchable()
                     ->sortable()
-                    ->description(fn (array $record) => (strlen($record['description']) > 120) ? substr($record['description'], 0, 120).'...' : $record['description']),
-                TextColumn::make('author')
-                    ->url(fn ($state) => "https://modrinth.com/user/$state", true)
-                    ->sortable()
-                    ->toggleable(),
+                    ->wrap()
+                    ->formatStateUsing(function (array $record) {
+                        $title = e($record['title'] ?? '');
+                        $author = e($record['author'] ?? '');
+                        
+                        if ($author && $author !== 'Unknown') {
+                            $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                            return new HtmlString("
+                                <div class='flex flex-wrap items-baseline gap-x-2'>
+                                    <span class='font-bold text-gray-200' style='font-size: 1.05rem;'>{$title}</span>
+                                    <span class='text-xs text-gray-400 font-normal'>by <a href='{$authorUrl}' target='_blank' class='text-primary-400 hover:underline'>{$author}</a></span>
+                                </div>
+                            ");
+                        }
+                        
+                        return new HtmlString("<span class='font-bold text-gray-200' style='font-size: 1.05rem;'>{$title}</span>");
+                    })
+                    ->description(function (array $record) {
+                        if ($this->activeTab !== 'all') {
+                            return null;
+                        }
+                        
+                        $description = e($record['description'] ?? '');
+                        $categories = $record['categories'] ?? [];
+                        $tagHtml = '';
+                        
+                        if (!empty($categories) && is_array($categories)) {
+                            $tagHtml .= "<div class='flex flex-wrap gap-1.5 mt-2'>";
+                            
+                            $showTags = array_slice($categories, 0, 3);
+                            foreach ($showTags as $cat) {
+                                $catLabel = ucfirst(e($cat));
+                                $tagHtml .= "<span class='inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-800 text-gray-300 border border-gray-700/50'>{$catLabel}</span>";
+                            }
+                            
+                            if (count($categories) > 3) {
+                                $remaining = count($categories) - 3;
+                                $tagHtml .= "<span class='inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-800/40 text-gray-400 border border-gray-800/30'>+{$remaining}</span>";
+                            }
+                            
+                            $tagHtml .= "</div>";
+                        }
+                        
+                        return new HtmlString("
+                            <div class='mt-1 text-sm text-gray-400 leading-relaxed font-normal'>
+                                {$description}
+                                {$tagHtml}
+                            </div>
+                        ");
+                    }),
                 TextColumn::make('downloads')
                     ->icon('tabler-download')
                     ->numeric()
@@ -819,6 +864,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     ->color('danger')
                     ->tooltip(trans('minecraft-modrinth::strings.actions.uninstall'))
                     ->visible(function (array $record) {
+                        if ($this->activeTab !== 'installed') {
+                            return false;
+                        }
                         if (!empty($record['is_local'])) {
                             return true;
                         }

@@ -47,6 +47,13 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
     /** @var array<string, array<int, mixed>> Cache for version data by project_id */
     protected array $versionsCache = [];
 
+    public bool $isImporting = false;
+    public int $importProgress = 0;
+    public string $importStatus = '';
+    public ?string $importFilePath = null;
+    public ?array $importFilesToDownload = null;
+    public ?array $importDownloadedMods = [];
+
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
     protected static ?string $slug = 'modrinth';
@@ -748,130 +755,13 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             throw new Exception('Uploaded file not found.');
                         }
 
-                        $zip = new ZipArchive();
-                        if ($zip->open($absolutePath) !== true) {
-                            throw new Exception('Failed to open zip archive.');
+                        $tempDest = storage_path('app/modpack_import_' . $server->id . '.zip');
+                        if (file_exists($tempDest)) {
+                            unlink($tempDest);
                         }
 
-                        // Auto-detect base path containing modrinth.index.json or index.json
-                        $indexJsonPath = null;
-                        $basePath = '';
-                        for ($i = 0; $i < $zip->numFiles; $i++) {
-                            $entryName = $zip->getNameIndex($i);
-                            if ($entryName === 'modrinth.index.json' || $entryName === 'index.json') {
-                                $indexJsonPath = $entryName;
-                                $basePath = '';
-                                break;
-                            } elseif (str_ends_with($entryName, '/modrinth.index.json')) {
-                                $indexJsonPath = $entryName;
-                                $basePath = substr($entryName, 0, -strlen('modrinth.index.json'));
-                                break;
-                            } elseif (str_ends_with($entryName, '/index.json')) {
-                                $indexJsonPath = $entryName;
-                                $basePath = substr($entryName, 0, -strlen('index.json'));
-                                break;
-                            }
-                        }
-
-                        if ($indexJsonPath === null) {
-                            $filesInZip = [];
-                            for ($i = 0; $i < min($zip->numFiles, 15); $i++) {
-                                $filesInZip[] = $zip->getNameIndex($i);
-                            }
-                            $zip->close();
-                            throw new Exception('Missing modrinth.index.json in .mrpack. Files in zip: ' . implode(', ', $filesInZip));
-                        }
-
-                        $indexJsonContent = $zip->getFromName($indexJsonPath);
-                        if ($indexJsonContent === false) {
-                            $zip->close();
-                            throw new Exception('Failed to read index content.');
-                        }
-
-                        $indexData = json_decode($indexJsonContent, true);
-                        if (!is_array($indexData) || !isset($indexData['files']) || !is_array($indexData['files'])) {
-                            $zip->close();
-                            throw new Exception('Invalid index.json format in .mrpack.');
-                        }
-
-                        $fileRepository = app(DaemonFileRepository::class);
-                        $fileRepository->setServer($server);
-
-                        // 1. Extract overrides from zip
-                        $overrides = [];
-                        $serverOverrides = [];
-                        for ($i = 0; $i < $zip->numFiles; $i++) {
-                            $stat = $zip->statIndex($i);
-                            $entryName = $stat['name'];
-
-                            if (str_ends_with($entryName, '/')) {
-                                continue;
-                            }
-
-                            if (str_contains($entryName, '..') || str_contains($entryName, "\0")) {
-                                continue;
-                            }
-
-                            // Strip the base path
-                            if ($basePath !== '') {
-                                if (!str_starts_with($entryName, $basePath)) {
-                                    continue;
-                                }
-                                $relativeEntryName = substr($entryName, strlen($basePath));
-                            } else {
-                                $relativeEntryName = $entryName;
-                            }
-
-                            if (str_starts_with($relativeEntryName, 'overrides/')) {
-                                $target = substr($relativeEntryName, strlen('overrides/'));
-                                $overrides[$target] = $entryName;
-                            } elseif (str_starts_with($relativeEntryName, 'server-overrides/')) {
-                                $target = substr($relativeEntryName, strlen('server-overrides/'));
-                                $serverOverrides[$target] = $entryName;
-                            }
-                        }
-
-                        $allOverrides = array_merge($overrides, $serverOverrides);
-                        foreach ($allOverrides as $targetPath => $zipEntryName) {
-                            $content = $zip->getFromName($zipEntryName);
-                            if ($content !== false) {
-                                $fileRepository->putContent($targetPath, $content)->throw();
-                            }
-                        }
-
-                        $zip->close();
-
-                        // 2. Download files from index.json
-                        $downloadedMods = [];
-
-                        foreach ($indexData['files'] as $fileEntry) {
-                            if (!isset($fileEntry['path']) || !isset($fileEntry['downloads']) || !is_array($fileEntry['downloads'])) {
-                                continue;
-                            }
-
-                            if (isset($fileEntry['env']['server']) && $fileEntry['env']['server'] === 'unsupported') {
-                                continue;
-                            }
-
-                            $targetPath = $fileEntry['path'];
-
-                            if (str_contains($targetPath, '..') || str_contains($targetPath, "\0") || str_starts_with($targetPath, '/') || str_starts_with($targetPath, '\\')) {
-                                continue;
-                            }
-
-                            $downloadUrl = $fileEntry['downloads'][0];
-
-                            $fileRepository->pull($downloadUrl, dirname($targetPath))->throw();
-
-                            $sha1 = $fileEntry['hashes']['sha1'] ?? null;
-                            $filename = basename($targetPath);
-
-                            if ($sha1) {
-                                $downloadedMods[] = [
-                                    'sha1' => $sha1,
-                                    'filename' => $filename,
-                                ];
-                            }
+                        if (!copy($absolutePath, $tempDest)) {
+                            throw new Exception('Failed to prepare pack file.');
                         }
 
                         if ($disk) {
@@ -882,132 +772,349 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                         }
 
-                        // 3. Resolve Modrinth mods via hash lookup in bulk
-                        $resolvedMods = [];
-                        if (!empty($downloadedMods)) {
-                            $chunks = array_chunk($downloadedMods, 50);
-                            $versionDataMap = [];
-
-                            foreach ($chunks as $chunk) {
-                                $hashes = array_column($chunk, 'sha1');
-                                try {
-                                    $response = Http::asJson()
-                                        ->timeout(10)
-                                        ->connectTimeout(5)
-                                        ->throw()
-                                        ->post('https://api.modrinth.com/v2/version_files', [
-                                            'hashes' => $hashes,
-                                            'algorithm' => 'sha1',
-                                        ])
-                                        ->json();
-
-                                    if (is_array($response)) {
-                                        foreach ($response as $hash => $version) {
-                                            $versionDataMap[$hash] = $version;
-                                        }
-                                    }
-                                } catch (Exception $apiException) {
-                                    Log::warning('Modrinth API bulk hash lookup failed: ' . $apiException->getMessage());
-                                }
-                            }
-
-                            $projectIds = [];
-                            $modResolutions = [];
-
-                            foreach ($downloadedMods as $mod) {
-                                $sha1 = $mod['sha1'];
-                                if (isset($versionDataMap[$sha1])) {
-                                    $v = $versionDataMap[$sha1];
-                                    $projectId = $v['project_id'] ?? null;
-                                    if ($projectId) {
-                                        $projectIds[] = $projectId;
-                                        $modResolutions[$sha1] = [
-                                            'version_id' => $v['id'],
-                                            'version_number' => $v['version_number'],
-                                            'project_id' => $projectId,
-                                            'filename' => $mod['filename'],
-                                        ];
-                                    }
-                                }
-                            }
-
-                            $projectIds = array_values(array_unique($projectIds));
-
-                            $projectDetailsMap = [];
-                            if (!empty($projectIds)) {
-                                $projectChunks = array_chunk($projectIds, 50);
-                                foreach ($projectChunks as $pChunk) {
-                                    $idsParam = json_encode($pChunk);
-                                    try {
-                                        $projResponse = Http::asJson()
-                                            ->timeout(10)
-                                            ->connectTimeout(5)
-                                            ->throw()
-                                            ->get('https://api.modrinth.com/v2/projects', [
-                                                'ids' => $idsParam,
-                                            ])
-                                            ->json();
-
-                                        if (is_array($projResponse)) {
-                                            foreach ($projResponse as $proj) {
-                                                if (isset($proj['id'])) {
-                                                    $projectDetailsMap[$proj['id']] = $proj;
-                                                }
-                                            }
-                                        }
-                                    } catch (Exception $apiException) {
-                                        Log::warning('Modrinth API bulk projects lookup failed: ' . $apiException->getMessage());
-                                    }
-                                }
-                            }
-
-                            foreach ($modResolutions as $sha1 => $res) {
-                                $pId = $res['project_id'];
-                                if (isset($projectDetailsMap[$pId])) {
-                                    $proj = $projectDetailsMap[$pId];
-                                    $resolvedMods[] = [
-                                        'project_id' => $pId,
-                                        'project_slug' => $proj['slug'] ?? '',
-                                        'project_title' => $proj['title'] ?? '',
-                                        'version_id' => $res['version_id'],
-                                        'version_number' => $res['version_number'],
-                                        'filename' => $res['filename'],
-                                    ];
-                                }
-                            }
-                        }
-
-                        if (!empty($resolvedMods)) {
-                            MinecraftModrinth::saveModsMetadata($server, $resolvedMods);
-                        }
-
-                        $this->installedModsMetadata = null;
-                        $this->versionsCache = [];
-                        $this->js('$wire.$refresh()');
+                        $this->isImporting = true;
+                        $this->importProgress = 5;
+                        $this->importStatus = 'Initializing modpack installation...';
+                        $this->importFilePath = $tempDest;
+                        $this->importFilesToDownload = null;
+                        $this->importDownloadedMods = [];
 
                         Notification::make()
-                            ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success'))
-                            ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success_body'))
-                            ->success()
+                            ->title(trans('minecraft-modrinth::strings.actions.upload_mrpack'))
+                            ->body('Modpack installation started. Please keep this page open to track progress.')
+                            ->info()
                             ->send();
 
                     } catch (Exception $exception) {
                         report($exception);
 
-                        $this->installedModsMetadata = null;
-                        $this->versionsCache = [];
-                        $this->js('$wire.$refresh()');
-
                         Notification::make()
                             ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed'))
-                            ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed_body', [
-                                'error' => $exception->getMessage(),
-                            ]))
+                            ->body($exception->getMessage())
                             ->danger()
                             ->send();
                     }
                 }),
         ];
+    }
+
+    public function processImportTick(): void
+    {
+        if (!$this->isImporting || !$this->importFilePath) {
+            return;
+        }
+
+        /** @var Server $server */
+        $server = Filament::getTenant();
+
+        try {
+            $fileRepository = app(DaemonFileRepository::class);
+            $fileRepository->setServer($server);
+
+            // Phase 1: Parse & Extract Overrides
+            if ($this->importFilesToDownload === null) {
+                $this->importStatus = 'Reading pack index and extracting overrides...';
+                $this->importProgress = 10;
+
+                $zip = new ZipArchive();
+                if ($zip->open($this->importFilePath) !== true) {
+                    throw new Exception('Failed to open zip archive.');
+                }
+
+                $indexJsonPath = null;
+                $basePath = '';
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $entryName = $zip->getNameIndex($i);
+                    if ($entryName === 'modrinth.index.json' || $entryName === 'index.json') {
+                        $indexJsonPath = $entryName;
+                        $basePath = '';
+                        break;
+                    } elseif (str_ends_with($entryName, '/modrinth.index.json')) {
+                        $indexJsonPath = $entryName;
+                        $basePath = substr($entryName, 0, -strlen('modrinth.index.json'));
+                        break;
+                    } elseif (str_ends_with($entryName, '/index.json')) {
+                        $indexJsonPath = $entryName;
+                        $basePath = substr($entryName, 0, -strlen('index.json'));
+                        break;
+                    }
+                }
+
+                if ($indexJsonPath === null) {
+                    $zip->close();
+                    throw new Exception('Missing modrinth.index.json in .mrpack.');
+                }
+
+                $indexJsonContent = $zip->getFromName($indexJsonPath);
+                if ($indexJsonContent === false) {
+                    $zip->close();
+                    throw new Exception('Failed to read index content.');
+                }
+
+                $indexData = json_decode($indexJsonContent, true);
+                if (!is_array($indexData) || !isset($indexData['files']) || !is_array($indexData['files'])) {
+                    $zip->close();
+                    throw new Exception('Invalid index format.');
+                }
+
+                // Extract overrides
+                $overrides = [];
+                $serverOverrides = [];
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $stat = $zip->statIndex($i);
+                    $entryName = $stat['name'];
+
+                    if (str_ends_with($entryName, '/')) {
+                        continue;
+                    }
+
+                    if (str_contains($entryName, '..') || str_contains($entryName, "\0")) {
+                        continue;
+                    }
+
+                    if ($basePath !== '') {
+                        if (!str_starts_with($entryName, $basePath)) {
+                            continue;
+                        }
+                        $relativeEntryName = substr($entryName, strlen($basePath));
+                    } else {
+                        $relativeEntryName = $entryName;
+                    }
+
+                    if (str_starts_with($relativeEntryName, 'overrides/')) {
+                        $target = substr($relativeEntryName, strlen('overrides/'));
+                        $overrides[$target] = $entryName;
+                    } elseif (str_starts_with($relativeEntryName, 'server-overrides/')) {
+                        $target = substr($relativeEntryName, strlen('server-overrides/'));
+                        $serverOverrides[$target] = $entryName;
+                    }
+                }
+
+                $allOverrides = array_merge($overrides, $serverOverrides);
+                foreach ($allOverrides as $targetPath => $zipEntryName) {
+                    $content = $zip->getFromName($zipEntryName);
+                    if ($content !== false) {
+                        $fileRepository->putContent($targetPath, $content)->throw();
+                    }
+                }
+
+                $zip->close();
+
+                // Prepare files to download
+                $filesToDownload = [];
+                foreach ($indexData['files'] as $fileEntry) {
+                    if (!isset($fileEntry['path']) || !isset($fileEntry['downloads']) || !is_array($fileEntry['downloads'])) {
+                        continue;
+                    }
+
+                    if (isset($fileEntry['env']['server']) && $fileEntry['env']['server'] === 'unsupported') {
+                        continue;
+                    }
+
+                    $targetPath = $fileEntry['path'];
+                    if (str_contains($targetPath, '..') || str_contains($targetPath, "\0") || str_starts_with($targetPath, '/') || str_starts_with($targetPath, '\\')) {
+                        continue;
+                    }
+
+                    $filesToDownload[] = [
+                        'url' => $fileEntry['downloads'][0],
+                        'path' => $targetPath,
+                        'sha1' => $fileEntry['hashes']['sha1'] ?? null,
+                    ];
+                }
+
+                $this->importFilesToDownload = $filesToDownload;
+                $this->importDownloadedMods = [];
+                $this->importProgress = 15;
+                $this->importStatus = 'Overrides extracted. Downloading mods...';
+                return;
+            }
+
+            // Phase 2: Download files (3 at a time)
+            if (!empty($this->importFilesToDownload)) {
+                $chunk = array_splice($this->importFilesToDownload, 0, 3);
+                foreach ($chunk as $fileToDownload) {
+                    $fileRepository->pull($fileToDownload['url'], dirname($fileToDownload['path']))->throw();
+
+                    if ($fileToDownload['sha1']) {
+                        $this->importDownloadedMods[] = [
+                            'sha1' => $fileToDownload['sha1'],
+                            'filename' => basename($fileToDownload['path']),
+                        ];
+                    }
+                }
+
+                // Update progress
+                $remaining = count($this->importFilesToDownload);
+                $total = count($this->importDownloadedMods) + $remaining;
+                $downloadProgress = $total > 0 ? (1 - ($remaining / $total)) : 1;
+
+                $this->importProgress = (int)(15 + $downloadProgress * 65);
+                $this->importStatus = "Downloading mods (" . (count($this->importDownloadedMods)) . "/{$total})...";
+                return;
+            }
+
+            // Phase 3: Resolve metadata & save in bulk
+            if ($this->importProgress < 90) {
+                $this->importStatus = 'Resolving metadata against Modrinth API...';
+                $this->importProgress = 90;
+
+                $resolvedMods = [];
+                if (!empty($this->importDownloadedMods)) {
+                    $chunks = array_chunk($this->importDownloadedMods, 50);
+                    $versionDataMap = [];
+
+                    foreach ($chunks as $c) {
+                        $hashes = array_column($c, 'sha1');
+                        try {
+                            $response = Http::asJson()
+                                ->timeout(10)
+                                ->connectTimeout(5)
+                                ->throw()
+                                ->post('https://api.modrinth.com/v2/version_files', [
+                                    'hashes' => $hashes,
+                                    'algorithm' => 'sha1',
+                                ])
+                                ->json();
+
+                            if (is_array($response)) {
+                                foreach ($response as $hash => $version) {
+                                    $versionDataMap[$hash] = $version;
+                                }
+                            }
+                        } catch (Exception $apiException) {
+                            Log::warning('Modrinth API bulk hash lookup failed: ' . $apiException->getMessage());
+                        }
+                    }
+
+                    $projectIds = [];
+                    $modResolutions = [];
+
+                    foreach ($this->importDownloadedMods as $mod) {
+                        $sha1 = $mod['sha1'];
+                        if (isset($versionDataMap[$sha1])) {
+                            $v = $versionDataMap[$sha1];
+                            $projectId = $v['project_id'] ?? null;
+                            if ($projectId) {
+                                $projectIds[] = $projectId;
+                                $modResolutions[$sha1] = [
+                                    'version_id' => $v['id'],
+                                    'version_number' => $v['version_number'],
+                                    'project_id' => $projectId,
+                                    'filename' => $mod['filename'],
+                                ];
+                            }
+                        }
+                    }
+
+                    $projectIds = array_values(array_unique($projectIds));
+                    $projectDetailsMap = [];
+                    if (!empty($projectIds)) {
+                        $projectChunks = array_chunk($projectIds, 50);
+                        foreach ($projectChunks as $pChunk) {
+                            $idsParam = json_encode($pChunk);
+                            try {
+                                $projResponse = Http::asJson()
+                                    ->timeout(10)
+                                    ->connectTimeout(5)
+                                    ->throw()
+                                    ->get('https://api.modrinth.com/v2/projects', [
+                                        'ids' => $idsParam,
+                                    ])
+                                    ->json();
+
+                                if (is_array($projResponse)) {
+                                    foreach ($projResponse as $proj) {
+                                        if (isset($proj['id'])) {
+                                            $projectDetailsMap[$proj['id']] = $proj;
+                                        }
+                                    }
+                                }
+                            } catch (Exception $apiException) {
+                                Log::warning('Modrinth API bulk projects lookup failed: ' . $apiException->getMessage());
+                            }
+                        }
+                    }
+
+                    foreach ($modResolutions as $sha1 => $res) {
+                        $pId = $res['project_id'];
+                        if (isset($projectDetailsMap[$pId])) {
+                            $proj = $projectDetailsMap[$pId];
+                            $resolvedMods[] = [
+                                'project_id' => $pId,
+                                'project_slug' => $proj['slug'] ?? '',
+                                'project_title' => $proj['title'] ?? '',
+                                'version_id' => $res['version_id'],
+                                'version_number' => $res['version_number'],
+                                'filename' => $res['filename'],
+                            ];
+                        }
+                    }
+                }
+
+                if (!empty($resolvedMods)) {
+                    MinecraftModrinth::saveModsMetadata($server, $resolvedMods);
+                }
+
+                $this->importProgress = 95;
+                $this->importStatus = 'Finalizing modpack installation...';
+                return;
+            }
+
+            // Phase 4: Finalize
+            if (file_exists($this->importFilePath)) {
+                try {
+                    unlink($this->importFilePath);
+                } catch (Exception $e) {
+                    // Ignore
+                }
+            }
+
+            $this->isImporting = false;
+            $this->importProgress = 100;
+            $this->importFilePath = null;
+            $this->importFilesToDownload = null;
+            $this->importDownloadedMods = [];
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+            $this->js('$wire.$refresh()');
+
+            Notification::make()
+                ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success'))
+                ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success_body'))
+                ->success()
+                ->send();
+
+        } catch (Exception $exception) {
+            report($exception);
+
+            if ($this->importFilePath && file_exists($this->importFilePath)) {
+                try {
+                    unlink($this->importFilePath);
+                } catch (Exception $e) {
+                    // Ignore
+                }
+            }
+
+            $this->isImporting = false;
+            $this->importProgress = 0;
+            $this->importFilePath = null;
+            $this->importFilesToDownload = null;
+            $this->importDownloadedMods = [];
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+            $this->js('$wire.$refresh()');
+
+            Notification::make()
+                ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed'))
+                ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed_body', [
+                    'error' => $exception->getMessage(),
+                ]))
+                ->danger()
+                ->send();
+        }
     }
 
     public function content(Schema $schema): Schema
@@ -1019,6 +1126,28 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
         return $schema
             ->components([
+                TextEntry::make('import_progress')
+                    ->hidden(fn () => !$this->isImporting)
+                    ->hiddenLabel()
+                    ->columnSpanFull()
+                    ->state(fn () => new HtmlString(<<<HTML
+                        <div wire:poll.1s="processImportTick" class="p-6 bg-gray-900 border border-primary-500/30 rounded-xl shadow-xl flex flex-col gap-4">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-3">
+                                    <span class="relative flex h-3 w-3">
+                                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
+                                      <span class="relative inline-flex rounded-full h-3 w-3 bg-primary-500"></span>
+                                    </span>
+                                    <span class="text-sm font-semibold text-gray-200">Installing Modpack</span>
+                                </div>
+                                <span class="text-xs text-primary-400 font-mono">{$this->importProgress}%</span>
+                            </div>
+                            <div class="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                                <div class="bg-primary-500 h-full rounded-full transition-all duration-500 ease-out" style="width: {$this->importProgress}%"></div>
+                            </div>
+                            <p class="text-xs text-gray-400 italic">Status: <span class="text-gray-300 font-medium">{$this->importStatus}</span></p>
+                        </div>
+                    HTML)),
                 Grid::make(3)
                     ->schema([
                         TextEntry::make('Minecraft Version')

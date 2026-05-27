@@ -610,13 +610,24 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Title column - take all available space */
+                            .fi-ta-row > td.fi-ta-col-title,
                             .fi-ta-row > td.fi-ta-cell-title {
                                 flex: 1 !important;
                                 min-width: 0 !important;
                                 display: block !important;
                             }
                             
+                            /* Selection checkbox cell styling */
+                            .fi-ta-row > td:first-child:has(input[type="checkbox"]) {
+                                margin-right: 12px !important;
+                                flex-shrink: 0 !important;
+                            }
+                            
                             /* Muted grey color for secondary column cells (downloads, date_modified, version) */
+                            .fi-ta-row > td.fi-ta-col-downloads,
+                            .fi-ta-row > td.fi-ta-col-date_modified,
+                            .fi-ta-row > td.fi-ta-col-date-modified,
+                            .fi-ta-row > td.fi-ta-col-version,
                             .fi-ta-row > td.fi-ta-cell-downloads,
                             .fi-ta-row > td.fi-ta-cell-date_modified,
                             .fi-ta-row > td.fi-ta-cell-date-modified,
@@ -631,7 +642,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 gap: 6px !important;
                             }
                             
-                            /* Hide status column label */
+                            /* Status toggle switch column */
+                            .fi-ta-row > td.fi-ta-col-is_enabled,
                             .fi-ta-row > td.fi-ta-cell-is_enabled {
                                 flex-shrink: 0 !important;
                                 margin-left: 24px !important;
@@ -736,6 +748,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Toggle switch style alignment */
+                            .fi-ta-row > td.fi-ta-col-is_enabled,
                             .fi-ta-row > td.fi-ta-cell-is_enabled {
                                 color: transparent !important;
                             }

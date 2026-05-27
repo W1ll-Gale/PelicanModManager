@@ -573,20 +573,21 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 border: none !important;
                             }
                             
-                            /* Style each table row as a sleek Modrinth Card */
+                            /* Style each table row as a sleek premium Modrinth card */
                             .fi-ta-row {
                                 display: flex !important;
                                 flex-direction: row !important;
                                 align-items: center !important;
                                 justify-content: space-between !important;
                                 background-color: #1a1a1e !important; /* Rich sleek dark grey */
-                                border: 1px solid #2d2f34 !important; /* Thin borders */
+                                border: 1px solid #2d2f34 !important; /* Thin border */
                                 border-radius: 12px !important;
                                 padding: 16px 20px !important;
                                 margin-bottom: 14px !important;
                                 transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
                                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
                                 width: 100% !important;
+                                box-sizing: border-box !important;
                             }
                             
                             .fi-ta-row:hover {
@@ -596,7 +597,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
                             }
                             
-                            /* Clear table cell borders and defaults */
+                            /* Base cell reset */
                             .fi-ta-row > td {
                                 border: none !important;
                                 padding: 0 !important;
@@ -604,64 +605,111 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 display: flex !important;
                                 align-items: center !important;
                                 height: auto !important;
+                                min-width: 0 !important;
+                                box-sizing: border-box !important;
                             }
                             
-                            /* Title column - take all available space */
-                            .fi-ta-row > td.fi-ta-col-title,
-                            .fi-ta-row > td.fi-ta-cell-title {
+                            /* =========================================================================
+                               ALL TAB (No selection checkbox)
+                               - 1st cell: Title (flex: 1)
+                               - 2nd cell: Downloads (Hidden)
+                               - 3rd cell: Date Modified (Hidden)
+                               - 4th cell: Actions (last-child, flex-shrink: 0)
+                               ========================================================================= */
+                            
+                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:first-child {
                                 flex: 1 !important;
                                 min-width: 0 !important;
                                 display: block !important;
                             }
                             
-                            /* Selection checkbox cell styling */
-                            .fi-ta-row > td:first-child:has(input[type="checkbox"]) {
-                                margin-right: 12px !important;
-                                flex-shrink: 0 !important;
-                            }
-                            
-                            /* Hide downloads and date modified column cells visually on 'all' tab */
-                            .fi-ta-row > td.fi-ta-col-downloads,
-                            .fi-ta-row > td.fi-ta-col-date_modified,
-                            .fi-ta-row > td.fi-ta-col-date-modified,
-                            .fi-ta-row > td.fi-ta-cell-downloads,
-                            .fi-ta-row > td.fi-ta-cell-date_modified,
-                            .fi-ta-row > td.fi-ta-cell-date-modified {
+                            /* Hide redundant cells on All tab */
+                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(2),
+                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(3) {
                                 display: none !important;
                             }
-
-                            /* Style the version cell on 'installed' tab */
-                            .fi-ta-row > td.fi-ta-col-version,
-                            .fi-ta-row > td.fi-ta-cell-version {
+                            
+                            /* =========================================================================
+                               INSTALLED TAB (Has selection checkbox)
+                               - 1st cell: Checkbox (flex-shrink: 0)
+                               - 2nd cell: Title (flex: 1)
+                               - 3rd cell: Version (flex-shrink: 0, width: 220px)
+                               - 4th cell: Status Toggle (flex-shrink: 0, width: 80px)
+                               - 5th cell: Actions (last-child, flex-shrink: 0)
+                               ========================================================================= */
+                            
+                            /* Checkbox column */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:first-child {
+                                margin-right: 16px !important;
                                 flex-shrink: 0 !important;
-                                margin-left: 24px !important;
-                                color: #a1a1aa !important;
-                                font-size: 14px !important;
-                                font-weight: 500 !important;
-                                display: inline-flex !important;
+                                display: flex !important;
                                 align-items: center !important;
-                                gap: 6px !important;
+                                justify-content: center !important;
+                                width: auto !important;
+                            }
+                            
+                            /* Title column */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) {
+                                flex: 1 !important;
+                                min-width: 0 !important;
+                                display: block !important;
+                            }
+                            
+                            /* Version column */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(3) {
+                                flex-shrink: 0 !important;
+                                width: 220px !important;
+                                margin-left: 24px !important;
+                                margin-right: 24px !important;
+                                display: flex !important;
+                                align-items: center !important;
                             }
                             
                             /* Status toggle switch column */
-                            .fi-ta-row > td.fi-ta-col-is_enabled,
-                            .fi-ta-row > td.fi-ta-cell-is_enabled {
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(4) {
                                 flex-shrink: 0 !important;
-                                margin-left: 24px !important;
-                                display: inline-flex !important;
+                                width: 80px !important;
+                                margin-right: 24px !important;
+                                display: flex !important;
                                 align-items: center !important;
+                                justify-content: center !important;
+                                color: transparent !important;
                             }
                             
-                            /* Format svg icons inside status columns */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(4) > div {
+                                color: initial !important;
+                            }
+                            
+                            /* =========================================================================
+                               COMMON ELEMENTS & CONTENT WRAPPER RESETS
+                               ========================================================================= */
+                            
+                            /* Ensure the inner Filament wrappers expand to fill the cell width */
+                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) > div,
+                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) .fi-ta-col-wrp,
+                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) .fi-ta-text,
+                            .fi-ta-row > td:nth-child(2) > div,
+                            .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
+                            .fi-ta-row > td:nth-child(2) .fi-ta-text {
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                display: block !important;
+                            }
+                            
+                            /* Prevent inner Filament padding/margins from breaking the layout */
+                            .fi-ta-col-wrp {
+                                padding: 0 !important;
+                                margin: 0 !important;
+                            }
+                            
+                            /* Format svg icons inside columns */
                             .fi-ta-row > td svg {
                                 color: #a1a1aa !important;
                             }
                             
-                            /* Style actions cell */
-                            .fi-ta-row > td.fi-ta-actions-cell,
+                            /* Actions Column alignment (always the last-child) */
                             .fi-ta-row > td:last-child {
                                 flex-shrink: 0 !important;
-                                margin-left: 32px !important;
                                 display: inline-flex !important;
                                 align-items: center !important;
                                 gap: 12px !important;
@@ -669,7 +717,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Style buttons inside cards to look premium and consistent */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn,
                             .fi-ta-row > td:last-child .fi-btn {
                                 border-radius: 8px !important;
                                 padding: 8px 16px !important;
@@ -683,8 +730,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Green pill buttons for Installed (disabled) */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success[disabled],
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:disabled,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
                                 background-color: rgba(16, 185, 129, 0.1) !important;
@@ -695,40 +740,32 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Green buttons for Install Latest / Install */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:not([disabled]),
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
                                 background-color: #10b981 !important;
                                 color: #ffffff !important;
                                 box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
                             }
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:not([disabled]):hover,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
                                 background-color: #0d9488 !important;
                                 box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
                             }
                             
                             /* Warning buttons for Update */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-warning,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
                                 background-color: #f59e0b !important;
                                 color: #ffffff !important;
                             }
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-warning:hover,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
                                 background-color: #d97706 !important;
                             }
                             
                             /* Info/Gray buttons for Versions selection */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-info,
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-gray,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
                                 background-color: rgba(255, 255, 255, 0.05) !important;
                                 border: 1px solid rgba(255, 255, 255, 0.08) !important;
                                 color: #e4e4e7 !important;
                             }
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-info:hover,
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-gray:hover,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
                                 background-color: rgba(255, 255, 255, 0.1) !important;
@@ -736,22 +773,14 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* Danger buttons for Uninstall */
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-danger,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
                                 background-color: rgba(239, 68, 68, 0.1) !important;
                                 border: 1px solid rgba(239, 68, 68, 0.2) !important;
                                 color: #ef4444 !important;
                             }
-                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-danger:hover,
                             .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
                                 background-color: rgba(239, 68, 68, 0.2) !important;
                                 border-color: rgba(239, 68, 68, 0.3) !important;
-                            }
-                            
-                            /* Toggle switch style alignment */
-                            .fi-ta-row > td.fi-ta-col-is_enabled,
-                            .fi-ta-row > td.fi-ta-cell-is_enabled {
-                                color: transparent !important;
                             }
                         </style>
                         HTML;
@@ -764,7 +793,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             
                             return new HtmlString("
                                 {$styleHtml}
-                                <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0;'>
+                                <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0; width: 100%;'>
                                     <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
                                     <div style='display: flex; flex-direction: column; gap: 6px;'>
                                         <span style='font-size: 16px; font-weight: 700; color: #ffffff;'>{$title}</span>
@@ -807,7 +836,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         
                         $descHtml = "";
                         if ($description) {
-                            $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 4px; max-width: 750px; word-break: break-word;'>{$description}</div>";
+                            $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 4px; max-width: 750px; word-break: break-word; white-space: normal !important;'>{$description}</div>";
                         }
                         
                         // Dynamic statistics formatting for 'all' tab vertical stack

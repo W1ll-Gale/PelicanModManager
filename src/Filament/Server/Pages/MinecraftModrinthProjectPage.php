@@ -458,6 +458,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                     }
                                     $project['filename'] = $item['filename'];
                                     $project['is_local'] = false;
+                                    $project['is_disabled'] = $item['is_disabled'] ?? false;
+                                    $project['metadata'] = $mod;
                                     $resolvedRegistered[] = $project;
                                 } else {
                                     // Fallback if mod is no longer available on Modrinth
@@ -543,15 +545,22 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             ->paginated([20])
             ->columns([
                 ImageColumn::make('icon_url')
-                    ->label(''),
+                    ->label('')
+                    ->visible(false),
                 TextColumn::make('title')
                     ->label(fn () => $this->activeTab === 'installed' ? 'Project' : 'Title')
                     ->searchable()
                     ->sortable()
                     ->wrap()
-                    ->formatStateUsing(function (array $record) {
-                        $title = e($record['title'] ?? '');
-                        $author = e($record['author'] ?? '');
+                    ->formatStateUsing(function ($state, $record) {
+                        $title = e($record['title'] ?? $state ?? '');
+                        $author = e($record['author'] ?? 'Unknown');
+                        $iconUrl = $record['icon_url'] ?? null;
+                        
+                        // Default package placeholder icon if empty
+                        if (empty($iconUrl)) {
+                            $iconUrl = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'></path><polyline points='3.27 6.96 12 12.01 20.73 6.96'></polyline><line x1='12' y1='22.08' x2='12' y2='12'></line></svg>";
+                        }
                         
                         if ($this->activeTab === 'installed') {
                             $authorUrl = "https://modrinth.com/user/" . urlencode($author);
@@ -560,68 +569,72 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 : "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
                             
                             return new HtmlString("
-                                <div style='display: flex; align-items: center; gap: 12px;'>
+                                <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0;'>
+                                    <img src='{$iconUrl}' style='width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
                                     <div style='display: flex; flex-direction: column; gap: 4px;'>
                                         <span style='font-size: 15px; font-weight: 700; color: #f3f4f6;'>{$title}</span>
                                         <div style='display: flex; align-items: center; gap: 6px;'>
                                             <img src='{$avatarUrl}' style='width: 16px; height: 16px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);' />
-                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #9ca3af; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author}</a>
+                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #9ca3af; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #9ca3af;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a>
                                         </div>
                                     </div>
                                 </div>
                             ");
                         }
                         
-                        if ($author && $author !== 'Unknown') {
-                            $authorUrl = "https://modrinth.com/user/" . urlencode($author);
-                            return new HtmlString("
-                                <div style='display: inline-flex; align-items: baseline; gap: 8px; flex-wrap: nowrap;'>
-                                    <span style='font-size: 16px; font-weight: 700; color: #f3f4f6; white-space: nowrap;'>{$title}</span>
-                                    <span style='font-size: 13px; color: #9ca3af; font-weight: 400; white-space: nowrap;'>by <a href='{$authorUrl}' target='_blank' style='color: #3b82f6; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author}</a></span>
-                                </div>
-                            ");
-                        }
-                        
-                        return new HtmlString("<span style='font-size: 16px; font-weight: 700; color: #f3f4f6;'>{$title}</span>");
-                    })
-                    ->description(function (array $record) {
-                        if ($this->activeTab !== 'all') {
-                            return null;
-                        }
-                        
+                        // Active tab is 'all'
                         $description = e($record['description'] ?? '');
                         $categories = $record['categories'] ?? [];
                         $tagHtml = '';
                         
                         if (!empty($categories) && is_array($categories)) {
-                            $tagHtml .= "<div class='flex flex-wrap gap-1.5 mt-2'>";
+                            $tagHtml .= "<div style='display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;'>";
                             
                             $showTags = array_slice($categories, 0, 3);
                             foreach ($showTags as $cat) {
                                 $catLabel = ucfirst(e($cat));
-                                $tagHtml .= "<span class='inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-800 text-gray-300 border border-gray-700/50'>{$catLabel}</span>";
+                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: #1f2937; color: #d1d5db; border: 1px solid rgba(255,255,255,0.08);'>{$catLabel}</span>";
                             }
                             
                             if (count($categories) > 3) {
                                 $remaining = count($categories) - 3;
-                                $tagHtml .= "<span class='inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-800/40 text-gray-400 border border-gray-800/30'>+{$remaining}</span>";
+                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: rgba(31,41,55,0.4); color: #9ca3af; border: 1px solid rgba(255,255,255,0.05);'>+{$remaining}</span>";
                             }
                             
                             $tagHtml .= "</div>";
                         }
+
+                        $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                        $authorHtml = "";
+                        if ($author && $author !== 'Unknown') {
+                            $authorHtml = "<span style='font-size: 13px; color: #9ca3af; font-weight: 400;'>by <a href='{$authorUrl}' target='_blank' style='color: #3b82f6; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #9ca3af;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a></span>";
+                        }
+                        
+                        $descHtml = "";
+                        if ($description) {
+                            $descHtml = "<div style='font-size: 13px; color: #9ca3af; line-height: 1.5; margin-top: 2px; max-width: 650px; word-break: break-word;'>{$description}</div>";
+                        }
                         
                         return new HtmlString("
-                            <div class='mt-1 text-sm text-gray-400 leading-relaxed font-normal'>
-                                {$description}
-                                {$tagHtml}
+                            <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0;'>
+                                <img src='{$iconUrl}' style='width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
+                                <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;'>
+                                    <div style='display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;'>
+                                        <span style='font-size: 16px; font-weight: 700; color: #f3f4f6;'>{$title}</span>
+                                        {$authorHtml}
+                                    </div>
+                                    {$descHtml}
+                                    {$tagHtml}
+                                </div>
                             </div>
                         ");
-                    }),
+                    })
+                    ->description(null),
                 TextColumn::make('version')
                     ->label('Version')
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->wrap()
-                    ->formatStateUsing(function (array $record) {
+                    ->formatStateUsing(function ($state, $record) {
                         $version = '';
                         if (!empty($record['is_local'])) {
                             $version = 'Local';
@@ -632,18 +645,18 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $filename = e($record['filename'] ?? '');
                         
                         return new HtmlString("
-                            <div style='display: flex; flex-direction: column; gap: 4px;'>
+                            <div style='display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left;'>
                                 <span style='font-size: 14px; font-weight: 700; color: #f3f4f6;'>{$version}</span>
-                                <span style='font-size: 12px; color: #6b7280; font-family: monospace;'>{$filename}</span>
+                                <span style='font-size: 11px; color: #6b7280; font-family: monospace; word-break: break-all; max-width: 250px;'>{$filename}</span>
                             </div>
                         ");
                     }),
                 TextColumn::make('is_enabled')
                     ->label('Status')
                     ->visible(fn () => $this->activeTab === 'installed')
-                    ->formatStateUsing(function (array $record) {
-                        $projectId = e($record['project_id']);
-                        $filename = e($record['filename']);
+                    ->formatStateUsing(function ($state, $record) {
+                        $projectId = e($record['project_id'] ?? '');
+                        $filename = e($record['filename'] ?? '');
                         $isEnabled = empty($record['is_disabled']);
                         $activeColor = $isEnabled ? '#10b981' : '#4b5563';
                         $switchId = 'switch_' . md5($projectId);

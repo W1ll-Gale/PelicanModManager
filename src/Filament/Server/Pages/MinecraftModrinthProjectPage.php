@@ -561,6 +561,186 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         if (empty($iconUrl)) {
                             $iconUrl = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'></path><polyline points='3.27 6.96 12 12.01 20.73 6.96'></polyline><line x1='12' y1='22.08' x2='12' y2='12'></line></svg>";
                         }
+
+                        $styleHtml = <<<HTML
+                        <style>
+                            /* Hide the column header row */
+                            .fi-ta-table thead {
+                                display: none !important;
+                            }
+                            
+                            /* Remove standard table style and container shadow */
+                            .fi-ta-content {
+                                background: transparent !important;
+                                box-shadow: none !important;
+                                border: none !important;
+                            }
+                            
+                            /* Style each table row as a sleek Modrinth Card */
+                            .fi-ta-row {
+                                display: flex !important;
+                                flex-direction: row !important;
+                                align-items: center !important;
+                                justify-content: space-between !important;
+                                background-color: #1a1a1e !important; /* Rich sleek dark grey */
+                                border: 1px solid #2d2f34 !important; /* Thin borders */
+                                border-radius: 12px !important;
+                                padding: 16px 20px !important;
+                                margin-bottom: 14px !important;
+                                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+                                width: 100% !important;
+                            }
+                            
+                            .fi-ta-row:hover {
+                                border-color: #4b4f56 !important;
+                                background-color: #202024 !important;
+                                transform: translateY(-1px);
+                                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+                            }
+                            
+                            /* Clear table cell borders and defaults */
+                            .fi-ta-row > td {
+                                border: none !important;
+                                padding: 0 !important;
+                                background: transparent !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                height: auto !important;
+                            }
+                            
+                            /* Title column - take all available space */
+                            .fi-ta-row > td.fi-ta-cell-title {
+                                flex: 1 !important;
+                                min-width: 0 !important;
+                                display: block !important;
+                            }
+                            
+                            /* Muted grey color for secondary column cells (downloads, date_modified, version) */
+                            .fi-ta-row > td.fi-ta-cell-downloads,
+                            .fi-ta-row > td.fi-ta-cell-date_modified,
+                            .fi-ta-row > td.fi-ta-cell-date-modified,
+                            .fi-ta-row > td.fi-ta-cell-version {
+                                flex-shrink: 0 !important;
+                                margin-left: 24px !important;
+                                color: #a1a1aa !important;
+                                font-size: 14px !important;
+                                font-weight: 500 !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                gap: 6px !important;
+                            }
+                            
+                            /* Hide status column label */
+                            .fi-ta-row > td.fi-ta-cell-is_enabled {
+                                flex-shrink: 0 !important;
+                                margin-left: 24px !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                            }
+                            
+                            /* Format svg icons inside status columns */
+                            .fi-ta-row > td svg {
+                                color: #a1a1aa !important;
+                            }
+                            
+                            /* Style actions cell */
+                            .fi-ta-row > td.fi-ta-actions-cell,
+                            .fi-ta-row > td:last-child {
+                                flex-shrink: 0 !important;
+                                margin-left: 32px !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                gap: 12px !important;
+                                justify-content: flex-end !important;
+                            }
+                            
+                            /* Style buttons inside cards to look premium and consistent */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn,
+                            .fi-ta-row > td:last-child .fi-btn {
+                                border-radius: 8px !important;
+                                padding: 8px 16px !important;
+                                font-size: 13px !important;
+                                font-weight: 600 !important;
+                                text-transform: none !important;
+                                letter-spacing: normal !important;
+                                box-shadow: none !important;
+                                transition: all 0.2s ease !important;
+                                border: 1px solid transparent !important;
+                            }
+                            
+                            /* Green pill buttons for Installed (disabled) */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success[disabled],
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:disabled,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
+                                background-color: rgba(16, 185, 129, 0.1) !important;
+                                border: 1px solid rgba(16, 185, 129, 0.2) !important;
+                                color: #10b981 !important;
+                                opacity: 0.9 !important;
+                                cursor: default !important;
+                            }
+                            
+                            /* Green buttons for Install Latest / Install */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:not([disabled]),
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
+                                background-color: #10b981 !important;
+                                color: #ffffff !important;
+                                box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
+                            }
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-success:not([disabled]):hover,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
+                                background-color: #0d9488 !important;
+                                box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
+                            }
+                            
+                            /* Warning buttons for Update */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-warning,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
+                                background-color: #f59e0b !important;
+                                color: #ffffff !important;
+                            }
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-warning:hover,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
+                                background-color: #d97706 !important;
+                            }
+                            
+                            /* Info/Gray buttons for Versions selection */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-info,
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-gray,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
+                                background-color: rgba(255, 255, 255, 0.05) !important;
+                                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                                color: #e4e4e7 !important;
+                            }
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-info:hover,
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-gray:hover,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
+                                background-color: rgba(255, 255, 255, 0.1) !important;
+                                border-color: rgba(255, 255, 255, 0.16) !important;
+                            }
+                            
+                            /* Danger buttons for Uninstall */
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-danger,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
+                                background-color: rgba(239, 68, 68, 0.1) !important;
+                                border: 1px solid rgba(239, 68, 68, 0.2) !important;
+                                color: #ef4444 !important;
+                            }
+                            .fi-ta-row > td.fi-ta-actions-cell .fi-btn.fi-btn-color-danger:hover,
+                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
+                                background-color: rgba(239, 68, 68, 0.2) !important;
+                                border-color: rgba(239, 68, 68, 0.3) !important;
+                            }
+                            
+                            /* Toggle switch style alignment */
+                            .fi-ta-row > td.fi-ta-cell-is_enabled {
+                                color: transparent !important;
+                            }
+                        </style>
+                        HTML;
                         
                         if ($this->activeTab === 'installed') {
                             $authorUrl = "https://modrinth.com/user/" . urlencode($author);
@@ -569,13 +749,14 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 : "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
                             
                             return new HtmlString("
+                                {$styleHtml}
                                 <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0;'>
-                                    <img src='{$iconUrl}' style='width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
-                                    <div style='display: flex; flex-direction: column; gap: 4px;'>
-                                        <span style='font-size: 15px; font-weight: 700; color: #f3f4f6;'>{$title}</span>
+                                    <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
+                                    <div style='display: flex; flex-direction: column; gap: 6px;'>
+                                        <span style='font-size: 16px; font-weight: 700; color: #ffffff;'>{$title}</span>
                                         <div style='display: flex; align-items: center; gap: 6px;'>
                                             <img src='{$avatarUrl}' style='width: 16px; height: 16px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);' />
-                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #9ca3af; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #9ca3af;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a>
+                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #a1a1aa; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #a1a1aa;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a>
                                         </div>
                                     </div>
                                 </div>
@@ -588,17 +769,17 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $tagHtml = '';
                         
                         if (!empty($categories) && is_array($categories)) {
-                            $tagHtml .= "<div style='display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;'>";
+                            $tagHtml .= "<div style='display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;'>";
                             
                             $showTags = array_slice($categories, 0, 3);
                             foreach ($showTags as $cat) {
                                 $catLabel = ucfirst(e($cat));
-                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: #1f2937; color: #d1d5db; border: 1px solid rgba(255,255,255,0.08);'>{$catLabel}</span>";
+                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background-color: #2d2f34; color: #e4e4e7; border: 1px solid rgba(255,255,255,0.04);'>{$catLabel}</span>";
                             }
                             
                             if (count($categories) > 3) {
                                 $remaining = count($categories) - 3;
-                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; background-color: rgba(31,41,55,0.4); color: #9ca3af; border: 1px solid rgba(255,255,255,0.05);'>+{$remaining}</span>";
+                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 3px 6px; border-radius: 6px; font-size: 11px; font-weight: 600; background-color: rgba(45,47,52,0.5); color: #a1a1aa; border: 1px solid rgba(255,255,255,0.03);'>+{$remaining}</span>";
                             }
                             
                             $tagHtml .= "</div>";
@@ -607,20 +788,21 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $authorUrl = "https://modrinth.com/user/" . urlencode($author);
                         $authorHtml = "";
                         if ($author && $author !== 'Unknown') {
-                            $authorHtml = "<span style='font-size: 13px; color: #9ca3af; font-weight: 400;'>by <a href='{$authorUrl}' target='_blank' style='color: #3b82f6; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #9ca3af;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a></span>";
+                            $authorHtml = "<span style='font-size: 13px; color: #a1a1aa; font-weight: 400;'>by <a href='{$authorUrl}' target='_blank' style='color: #10b981; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #a1a1aa;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a></span>";
                         }
                         
                         $descHtml = "";
                         if ($description) {
-                            $descHtml = "<div style='font-size: 13px; color: #9ca3af; line-height: 1.5; margin-top: 2px; max-width: 650px; word-break: break-word;'>{$description}</div>";
+                            $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 4px; max-width: 750px; word-break: break-word;'>{$description}</div>";
                         }
                         
                         return new HtmlString("
+                            {$styleHtml}
                             <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0;'>
-                                <img src='{$iconUrl}' style='width: 48px; height: 48px; border-radius: 8px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
+                                <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
                                 <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left;'>
                                     <div style='display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;'>
-                                        <span style='font-size: 16px; font-weight: 700; color: #f3f4f6;'>{$title}</span>
+                                        <span style='font-size: 18px; font-weight: 700; color: #ffffff; transition: color 0.15s ease;' onmouseover=\"this.style.color='#10b981'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</span>
                                         {$authorHtml}
                                     </div>
                                     {$descHtml}
@@ -692,12 +874,22 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     }),
                 TextColumn::make('downloads')
                     ->icon('tabler-download')
-                    ->numeric()
+                    ->formatStateUsing(function ($state) {
+                        if (!$state) return '0';
+                        $num = (int)$state;
+                        if ($num >= 1000000) {
+                            return round($num / 1000000, 2) . 'M';
+                        }
+                        if ($num >= 1000) {
+                            return round($num / 1000, 1) . 'K';
+                        }
+                        return $num;
+                    })
                     ->sortable()
                     ->toggleable()
                     ->visible(fn () => $this->activeTab === 'all'),
                 TextColumn::make('date_modified')
-                    ->icon('tabler-calendar')
+                    ->icon('tabler-clock')
                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state, 'UTC')->diffForHumans() : '')
                     ->tooltip(fn ($state) => $state ? Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()) : '')
                     ->sortable()
@@ -713,10 +905,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             }, true)
             ->recordActions([
                 Action::make('versions')
-                    ->iconButton()
                     ->icon('tabler-list')
-                    ->color('info')
-                    ->tooltip(trans('minecraft-modrinth::strings.actions.versions'))
+                    ->color('gray')
+                    ->label(trans('minecraft-modrinth::strings.actions.versions'))
                     ->visible(fn (array $record) => empty($record['unavailable']))
                     ->modalSubmitAction(false)
                     ->schema(function (array $record) {
@@ -829,10 +1020,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         return $sections;
                     }),
                 Action::make('install_latest')
-                    ->iconButton()
                     ->icon('tabler-download')
                     ->color('success')
-                    ->tooltip(trans('minecraft-modrinth::strings.actions.install_latest'))
+                    ->label(trans('minecraft-modrinth::strings.actions.install'))
                     ->visible(function (array $record) {
                         if (!empty($record['is_local']) || !empty($record['unavailable'])) {
                             return false;
@@ -887,10 +1077,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('update')
-                    ->iconButton()
                     ->icon('tabler-refresh')
                     ->color('warning')
-                    ->tooltip(trans('minecraft-modrinth::strings.actions.update'))
+                    ->label(trans('minecraft-modrinth::strings.actions.update'))
                     ->visible(function (array $record) {
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
@@ -968,10 +1157,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('installed')
-                    ->iconButton()
                     ->icon('tabler-check')
                     ->color('success')
-                    ->tooltip(trans('minecraft-modrinth::strings.actions.installed'))
+                    ->label(trans('minecraft-modrinth::strings.actions.installed'))
                     ->disabled()
                     ->visible(function (array $record) {
                         $installedMod = $this->getInstalledMod($record['project_id']);
@@ -989,10 +1177,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         return $installedMod['version_id'] === $versions[0]['id'];
                     }),
                 Action::make('uninstall')
-                    ->iconButton()
                     ->icon('tabler-trash')
                     ->color('danger')
-                    ->tooltip(trans('minecraft-modrinth::strings.actions.uninstall'))
+                    ->label(trans('minecraft-modrinth::strings.actions.uninstall'))
                     ->visible(function (array $record) {
                         if ($this->activeTab !== 'installed') {
                             return false;

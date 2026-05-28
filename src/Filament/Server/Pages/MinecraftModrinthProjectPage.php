@@ -104,7 +104,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         /** @var Server $server */
         $server = Filament::getTenant();
         $type = ModrinthProjectType::fromServer($server);
-        $tabLabel = $type === ModrinthProjectType::Plugins 
+        $tabLabel = $type === ModrinthProjectType::Plugin 
             ? trans('minecraft-modrinth::strings.page.browse_plugins') 
             : trans('minecraft-modrinth::strings.page.browse_mods');
 

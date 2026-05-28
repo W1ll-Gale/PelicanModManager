@@ -98,6 +98,244 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         $this->loadDefaultActiveTab();
     }
 
+    public function getExtraHeaders(): array
+    {
+        $css = <<<CSS
+            /* HIDE COLUMN HEADERS */
+            .modrinth-installed-table thead,
+            .modrinth-browse-table thead {
+                display: none !important;
+            }
+
+            /* REMOVE DEFAULT CONTAINER SHADOWS */
+            .modrinth-installed-table .fi-ta-content,
+            .modrinth-browse-table .fi-ta-content {
+                background: transparent !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+
+            /* EACH ROW AS A CARD */
+            .modrinth-installed-table .fi-ta-row,
+            .modrinth-browse-table .fi-ta-row {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                background-color: #1a1a1e !important;
+                border: 1px solid #2d2f34 !important;
+                border-radius: 12px !important;
+                padding: 16px 20px !important;
+                margin-bottom: 14px !important;
+                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row:hover,
+            .modrinth-browse-table .fi-ta-row:hover {
+                border-color: #4b4f56 !important;
+                background-color: #202024 !important;
+                transform: translateY(-1px);
+                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+            }
+
+            /* CELL RESET */
+            .modrinth-installed-table .fi-ta-row > td,
+            .modrinth-browse-table .fi-ta-row > td {
+                border: none !important;
+                padding: 0 !important;
+                background: transparent !important;
+                display: flex !important;
+                align-items: center !important;
+                height: auto !important;
+                min-width: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            /* --- INSTALLED TAB CELLS --- */
+            .modrinth-installed-table .fi-ta-row > td:first-child {
+                margin-right: 16px !important;
+                flex-shrink: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: auto !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:nth-child(2) {
+                flex: 1 !important;
+                min-width: 0 !important;
+                display: block !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:nth-child(2) > div,
+            .modrinth-installed-table .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
+            .modrinth-installed-table .fi-ta-row > td:nth-child(2) .fi-ta-text {
+                width: 100% !important;
+                max-width: 100% !important;
+                display: block !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:nth-child(3) {
+                flex-shrink: 0 !important;
+                width: 220px !important;
+                margin-left: 24px !important;
+                margin-right: 24px !important;
+                display: flex !important;
+                align-items: center !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:nth-child(4) {
+                flex-shrink: 0 !important;
+                width: 80px !important;
+                margin-right: 24px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                color: transparent !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:nth-child(4) > div {
+                color: initial !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row > td:last-child {
+                flex-shrink: 0 !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                gap: 12px !important;
+                justify-content: flex-end !important;
+            }
+
+            /* --- BROWSE TAB CELLS --- */
+            .modrinth-browse-table .fi-ta-row {
+                position: relative !important;
+                min-height: 114px !important;
+            }
+
+            .modrinth-browse-table .fi-ta-row > td:first-child {
+                flex: 1 !important;
+                min-width: 0 !important;
+                display: block !important;
+            }
+
+            .modrinth-browse-table .fi-ta-row > td:first-child > div,
+            .modrinth-browse-table .fi-ta-row .fi-ta-col-wrp,
+            .modrinth-browse-table .fi-ta-row .fi-ta-text {
+                padding-right: 170px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                display: block !important;
+                box-sizing: border-box !important;
+            }
+
+            .modrinth-browse-table .fi-ta-row > td:nth-child(2),
+            .modrinth-browse-table .fi-ta-row > td:nth-child(3) {
+                display: none !important;
+            }
+
+            .modrinth-browse-table .fi-ta-row > td:last-child {
+                position: absolute !important;
+                right: 20px !important;
+                top: 16px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: auto !important;
+                z-index: 10 !important;
+                flex-shrink: 0 !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: flex-end !important;
+            }
+
+            /* --- SHARED STYLINGS --- */
+            .modrinth-installed-table .fi-ta-row svg,
+            .modrinth-browse-table .fi-ta-row svg {
+                color: #a1a1aa !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn,
+            .modrinth-browse-table .fi-ta-row .fi-btn {
+                border-radius: 8px !important;
+                padding: 8px 16px !important;
+                font-size: 13px !important;
+                font-weight: 600 !important;
+                text-transform: none !important;
+                letter-spacing: normal !important;
+                box-shadow: none !important;
+                transition: all 0.2s ease !important;
+                border: 1px solid transparent !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success[disabled],
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:disabled,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success[disabled],
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:disabled {
+                background-color: rgba(16, 185, 129, 0.1) !important;
+                border: 1px solid rgba(16, 185, 129, 0.2) !important;
+                color: #10b981 !important;
+                opacity: 0.9 !important;
+                cursor: default !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]),
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]) {
+                background-color: #10b981 !important;
+                color: #ffffff !important;
+                box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
+            }
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]):hover,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]):hover {
+                background-color: #0d9488 !important;
+                box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-warning,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-warning {
+                background-color: #f59e0b !important;
+                color: #ffffff !important;
+            }
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-warning:hover,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-warning:hover {
+                background-color: #d97706 !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-info,
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-gray,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-info,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-gray {
+                background-color: rgba(255, 255, 255, 0.05) !important;
+                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                color: #e4e4e7 !important;
+            }
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-info:hover,
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-gray:hover,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-info:hover,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-gray:hover {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+                border-color: rgba(255, 255, 255, 0.16) !important;
+            }
+
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-danger,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-danger {
+                background-color: rgba(239, 68, 68, 0.1) !important;
+                border: 1px solid rgba(239, 68, 68, 0.2) !important;
+                color: #ef4444 !important;
+            }
+            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-danger:hover,
+            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-danger:hover {
+                background-color: rgba(239, 68, 68, 0.2) !important;
+                border-color: rgba(239, 68, 68, 0.3) !important;
+            }
+        CSS;
+
+        return [
+            'custom-modrinth-css' => new \Illuminate\Support\HtmlString("<style>{$css}</style>"),
+        ];
+    }
+
     /** @return array<string, Tab> */
     public function getTabs(): array
     {
@@ -125,6 +363,193 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         }
 
         return $this->installedModsMetadata;
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    protected function getInstalledModsResolvedList(Server $server, ModrinthProjectType $type): array
+    {
+        $cacheKey = "modrinth_installed_resolved_list_" . $server->uuid;
+        
+        return cache()->remember($cacheKey, now()->addSeconds(30), function () use ($server, $type) {
+            $fileRepository = app(DaemonFileRepository::class);
+            $installedModsMetadata = $this->getInstalledModsMetadata();
+
+            // 1. Get actual files in the mods/plugins folder
+            try {
+                $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
+                if (isset($files['error'])) {
+                    throw new Exception($files['error']);
+                }
+            } catch (Exception $e) {
+                report($e);
+                $files = [];
+            }
+
+            // Filter for .jar and .jar.disabled files
+            $jarFiles = collect($files)
+                ->filter(function ($file) {
+                    $name = strtolower($file['name']);
+                    return str_ends_with($name, '.jar') || str_ends_with($name, '.jar.disabled');
+                })
+                ->toArray();
+
+            $combinedItems = [];
+
+            // 2. Map disk files to Modrinth metadata or synthetic local entries
+            foreach ($jarFiles as $file) {
+                $filename = $file['name'];
+                $isDisabled = str_ends_with(strtolower($filename), '.disabled');
+                $cleanFilename = str_replace('.disabled', '', $filename);
+                
+                $matchedMetadata = collect($installedModsMetadata)
+                    ->first(fn ($mod) => strcasecmp(str_replace('.disabled', '', $mod['filename']), $cleanFilename) === 0);
+
+                if ($matchedMetadata) {
+                    $combinedItems[] = [
+                        'project_id' => $matchedMetadata['project_id'],
+                        'slug' => $matchedMetadata['project_slug'],
+                        'title' => $matchedMetadata['project_title'],
+                        'filename' => $filename,
+                        'installed_at' => $matchedMetadata['installed_at'],
+                        'author' => $matchedMetadata['author'] ?? 'Unknown',
+                        'is_local' => false,
+                        'is_disabled' => $isDisabled,
+                        'metadata' => $matchedMetadata,
+                    ];
+                } else {
+                    $combinedItems[] = [
+                        'project_id' => 'local_' . md5($filename),
+                        'slug' => '',
+                        'title' => basename($cleanFilename, '.jar'),
+                        'description' => 'Local mod file (' . $filename . ')',
+                        'icon_url' => null,
+                        'author' => 'Unknown',
+                        'downloads' => 0,
+                        'date_modified' => $file['modified'] ?? '',
+                        'project_type' => $type->value,
+                        'unavailable' => true,
+                        'filename' => $filename,
+                        'is_local' => true,
+                        'is_disabled' => $isDisabled,
+                    ];
+                }
+            }
+
+            // 3. Query Modrinth API in bulk for all managed items
+            $registeredMods = collect($combinedItems)->filter(fn ($item) => empty($item['is_local']))->toArray();
+            $resolvedRegistered = [];
+            
+            if (!empty($registeredMods)) {
+                $ids = collect($registeredMods)->pluck('project_id')->unique()->values()->toArray();
+                try {
+                    $response = Http::asJson()
+                        ->timeout(10)
+                        ->connectTimeout(5)
+                        ->get('https://api.modrinth.com/v2/projects', [
+                            'ids' => json_encode($ids),
+                        ])
+                        ->json();
+
+                    $modrinthMap = [];
+                    if (is_array($response)) {
+                        foreach ($response as $proj) {
+                            if (isset($proj['id'])) {
+                                $modrinthMap[$proj['id']] = $proj;
+                            }
+                        }
+                    }
+
+                    foreach ($registeredMods as $item) {
+                        $projectId = $item['project_id'];
+                        $mod = $item['metadata'];
+                        if (isset($modrinthMap[$projectId])) {
+                            $project = $modrinthMap[$projectId];
+                            $project['project_id'] = $project['id'];
+                            if (isset($project['updated']) && !isset($project['date_modified'])) {
+                                $project['date_modified'] = $project['updated'];
+                            }
+                            if (isset($mod['author']) && !isset($project['author'])) {
+                                $project['author'] = $mod['author'];
+                            }
+                            $project['filename'] = $item['filename'];
+                            $project['is_local'] = false;
+                            $project['is_disabled'] = $item['is_disabled'] ?? false;
+                            $project['metadata'] = $mod;
+                            $resolvedRegistered[] = $project;
+                        } else {
+                            $resolvedRegistered[] = [
+                                'project_id' => $mod['project_id'],
+                                'slug' => $mod['project_slug'],
+                                'title' => $mod['project_title'],
+                                'description' => trans('minecraft-modrinth::strings.page.mod_unavailable'),
+                                'icon_url' => null,
+                                'author' => $mod['author'] ?? '',
+                                'downloads' => 0,
+                                'date_modified' => $mod['installed_at'],
+                                'project_type' => '',
+                                'unavailable' => true,
+                                'filename' => $item['filename'],
+                                'is_local' => false,
+                            ];
+                        }
+                    }
+                } catch (Exception $e) {
+                    report($e);
+                    // Fallback to metadata details
+                    foreach ($registeredMods as $item) {
+                        $mod = $item['metadata'];
+                        $resolvedRegistered[] = [
+                            'project_id' => $mod['project_id'],
+                            'slug' => $mod['project_slug'],
+                            'title' => $mod['project_title'],
+                            'description' => 'Modrinth mod (' . $item['filename'] . ')',
+                            'icon_url' => null,
+                            'author' => $mod['author'] ?? 'Unknown',
+                            'downloads' => 0,
+                            'date_modified' => $mod['installed_at'],
+                            'project_type' => '',
+                            'unavailable' => true,
+                            'filename' => $item['filename'],
+                            'is_local' => false,
+                        ];
+                    }
+                }
+            }
+
+            // 4. Merge resolved Modrinth projects and local mods back together
+            $finalRecords = [];
+            foreach ($combinedItems as $item) {
+                if ($item['is_local']) {
+                    $finalRecords[] = $item;
+                } else {
+                    $matchedResolved = collect($resolvedRegistered)
+                        ->first(fn ($res) => $res['project_id'] === $item['project_id'] && strcasecmp($res['filename'], $item['filename']) === 0);
+                    if ($matchedResolved) {
+                        $finalRecords[] = $matchedResolved;
+                    } else {
+                        $mod = $item['metadata'];
+                        $finalRecords[] = [
+                            'project_id' => $mod['project_id'],
+                            'slug' => $mod['project_slug'],
+                            'title' => $mod['project_title'],
+                            'description' => 'Modrinth mod (' . $item['filename'] . ')',
+                            'icon_url' => null,
+                            'author' => $mod['author'] ?? 'Unknown',
+                            'downloads' => 0,
+                            'date_modified' => $mod['installed_at'],
+                            'project_type' => '',
+                            'unavailable' => true,
+                            'filename' => $item['filename'],
+                            'is_local' => false,
+                        ];
+                    }
+                }
+            }
+
+            return $finalRecords;
+        });
     }
 
     /** @return array{project_id: string, project_slug: string, project_title: string, version_id: string, version_number: string, filename: string, installed_at: string, author?: string}|null */
@@ -195,6 +620,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         array $primaryFile,
         ?array $installedMod = null
     ): void {
+        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+
         $fileRepository = app(DaemonFileRepository::class);
 
         $safeNewFilename = $this->validateFilename($primaryFile['filename']);
@@ -284,6 +711,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
+            ->extraAttributes(fn () => [
+                'class' => $this->activeTab === 'installed' ? 'modrinth-installed-table' : 'modrinth-browse-table',
+            ])
             ->records(function (?string $search, int $page) {
                 /** @var Server $server */
                 $server = Filament::getTenant();
@@ -294,71 +724,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         return new LengthAwarePaginator([], 0, 20, $page);
                     }
 
-                    $fileRepository = app(DaemonFileRepository::class);
-                    $installedModsMetadata = $this->getInstalledModsMetadata();
+                    $combinedItems = $this->getInstalledModsResolvedList($server, $type);
 
-                    // 1. Get actual files in the mods/plugins folder
-                    try {
-                        $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
-                        if (isset($files['error'])) {
-                            throw new Exception($files['error']);
-                        }
-                    } catch (Exception $e) {
-                        report($e);
-                        $files = [];
-                    }
-
-                    // Filter for .jar and .jar.disabled files
-                    $jarFiles = collect($files)
-                        ->filter(function ($file) {
-                            $name = strtolower($file['name']);
-                            return str_ends_with($name, '.jar') || str_ends_with($name, '.jar.disabled');
-                        })
-                        ->toArray();
-
-                    $combinedItems = [];
-
-                    // 2. Map disk files to Modrinth metadata or synthetic local entries
-                    foreach ($jarFiles as $file) {
-                        $filename = $file['name'];
-                        $isDisabled = str_ends_with(strtolower($filename), '.disabled');
-                        $cleanFilename = str_replace('.disabled', '', $filename);
-                        
-                        $matchedMetadata = collect($installedModsMetadata)
-                            ->first(fn ($mod) => strcasecmp(str_replace('.disabled', '', $mod['filename']), $cleanFilename) === 0);
-
-                        if ($matchedMetadata) {
-                            $combinedItems[] = [
-                                'project_id' => $matchedMetadata['project_id'],
-                                'slug' => $matchedMetadata['project_slug'],
-                                'title' => $matchedMetadata['project_title'],
-                                'filename' => $filename,
-                                'installed_at' => $matchedMetadata['installed_at'],
-                                'author' => $matchedMetadata['author'] ?? 'Unknown',
-                                'is_local' => false,
-                                'is_disabled' => $isDisabled,
-                                'metadata' => $matchedMetadata,
-                            ];
-                        } else {
-                            $combinedItems[] = [
-                                'project_id' => 'local_' . md5($filename),
-                                'slug' => '',
-                                'title' => basename($cleanFilename, '.jar'),
-                                'description' => 'Local mod file (' . $filename . ')',
-                                'icon_url' => null,
-                                'author' => 'Unknown',
-                                'downloads' => 0,
-                                'date_modified' => $file['modified'] ?? '',
-                                'project_type' => $type->value,
-                                'unavailable' => true,
-                                'filename' => $filename,
-                                'is_local' => true,
-                                'is_disabled' => $isDisabled,
-                            ];
-                        }
-                    }
-
-                    // 3. Apply search query if present
+                    // 1. Apply search query if present
                     if ($search) {
                         $searchLower = strtolower($search);
                         $combinedItems = array_values(array_filter($combinedItems, function (array $item) use ($searchLower) {
@@ -378,7 +746,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             } elseif ($statusFilter === 'disabled') {
                                 return !$isEnabled;
                             } elseif ($statusFilter === 'updates') {
-                                if ($item['is_local']) {
+                                if (!empty($item['is_local'])) {
                                     return false;
                                 }
                                 $versions = $this->getCachedVersions($item['project_id']);
@@ -407,7 +775,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                     case 'downloads':
                                         return (int)($item['downloads'] ?? 0);
                                     case 'date_modified':
-                                        $dateStr = $item['is_local'] 
+                                        $dateStr = !empty($item['is_local']) 
                                             ? ($item['date_modified'] ?? '') 
                                             : ($item['metadata']['installed_at'] ?? '');
                                         return $dateStr ? Carbon::parse($dateStr)->timestamp : 0;
@@ -425,122 +793,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     $perPage = 20;
                     $pageItems = array_slice($combinedItems, ($page - 1) * $perPage, $perPage);
 
-                    // 5. Query Modrinth API in bulk for Modrinth-managed items on this page
-                    $pageRegisteredMods = collect($pageItems)->filter(fn ($item) => empty($item['is_local']))->toArray();
-                    $pageLocalMods = collect($pageItems)->filter(fn ($item) => !empty($item['is_local']))->toArray();
-
-                    $resolvedRegistered = [];
-                    if (!empty($pageRegisteredMods)) {
-                        $ids = collect($pageRegisteredMods)->pluck('project_id')->unique()->values()->toArray();
-                        try {
-                            $response = Http::asJson()
-                                ->timeout(10)
-                                ->connectTimeout(5)
-                                ->throw()
-                                ->get('https://api.modrinth.com/v2/projects', [
-                                    'ids' => json_encode($ids),
-                                ])
-                                ->json();
-
-                            $modrinthMap = [];
-                            if (is_array($response)) {
-                                foreach ($response as $proj) {
-                                    if (isset($proj['id'])) {
-                                        $modrinthMap[$proj['id']] = $proj;
-                                    }
-                                }
-                            }
-
-                            foreach ($pageRegisteredMods as $item) {
-                                $projectId = $item['project_id'];
-                                $mod = $item['metadata'];
-                                if (isset($modrinthMap[$projectId])) {
-                                    $project = $modrinthMap[$projectId];
-                                    $project['project_id'] = $project['id'];
-                                    if (isset($project['updated']) && !isset($project['date_modified'])) {
-                                        $project['date_modified'] = $project['updated'];
-                                    }
-                                    if (isset($mod['author']) && !isset($project['author'])) {
-                                        $project['author'] = $mod['author'];
-                                    }
-                                    $project['filename'] = $item['filename'];
-                                    $project['is_local'] = false;
-                                    $project['is_disabled'] = $item['is_disabled'] ?? false;
-                                    $project['metadata'] = $mod;
-                                    $resolvedRegistered[] = $project;
-                                } else {
-                                    // Fallback if mod is no longer available on Modrinth
-                                    $resolvedRegistered[] = [
-                                        'project_id' => $mod['project_id'],
-                                        'slug' => $mod['project_slug'],
-                                        'title' => $mod['project_title'],
-                                        'description' => trans('minecraft-modrinth::strings.page.mod_unavailable'),
-                                        'icon_url' => null,
-                                        'author' => $mod['author'] ?? '',
-                                        'downloads' => 0,
-                                        'date_modified' => $mod['installed_at'],
-                                        'project_type' => '',
-                                        'unavailable' => true,
-                                        'filename' => $item['filename'],
-                                        'is_local' => false,
-                                    ];
-                                }
-                            }
-                        } catch (Exception $e) {
-                            report($e);
-                            // Fallback to metadata details for display
-                            foreach ($pageRegisteredMods as $item) {
-                                $mod = $item['metadata'];
-                                $resolvedRegistered[] = [
-                                    'project_id' => $mod['project_id'],
-                                    'slug' => $mod['project_slug'],
-                                    'title' => $mod['project_title'],
-                                    'description' => 'Modrinth mod (' . $item['filename'] . ')',
-                                    'icon_url' => null,
-                                    'author' => $mod['author'] ?? 'Unknown',
-                                    'downloads' => 0,
-                                    'date_modified' => $mod['installed_at'],
-                                    'project_type' => '',
-                                    'unavailable' => true,
-                                    'filename' => $item['filename'],
-                                    'is_local' => false,
-                                ];
-                            }
-                        }
-                    }
-
-                    // 6. Merge resolved Modrinth projects and local mods back together in the original page order
-                    $finalRecords = [];
-                    foreach ($pageItems as $item) {
-                        if ($item['is_local']) {
-                            $finalRecords[] = $item;
-                        } else {
-                            $matchedResolved = collect($resolvedRegistered)
-                                ->first(fn ($res) => $res['project_id'] === $item['project_id'] && strcasecmp($res['filename'], $item['filename']) === 0);
-                            if ($matchedResolved) {
-                                $finalRecords[] = $matchedResolved;
-                            } else {
-                                // Ultimate fallback
-                                $mod = $item['metadata'];
-                                $finalRecords[] = [
-                                    'project_id' => $mod['project_id'],
-                                    'slug' => $mod['project_slug'],
-                                    'title' => $mod['project_title'],
-                                    'description' => 'Modrinth mod (' . $item['filename'] . ')',
-                                    'icon_url' => null,
-                                    'author' => $mod['author'] ?? 'Unknown',
-                                    'downloads' => 0,
-                                    'date_modified' => $mod['installed_at'],
-                                    'project_type' => '',
-                                    'unavailable' => true,
-                                    'filename' => $item['filename'],
-                                    'is_local' => false,
-                                ];
-                            }
-                        }
-                    }
-
-                    return new LengthAwarePaginator($finalRecords, $totalItems, $perPage, $page);
+                    return new LengthAwarePaginator($pageItems, $totalItems, $perPage, $page);
                 } else {
                     $sortColumn = $this->getTableSortColumn();
                     $sortDirection = $this->getTableSortDirection();
@@ -567,376 +820,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         }
 
                         if ($this->activeTab === 'installed') {
-                            $styleHtml = <<<HTML
-                            <style>
-                                /* Hide the column header row */
-                                .fi-ta-table thead {
-                                    display: none !important;
-                                }
-                                
-                                /* Remove standard table style and container shadow */
-                                .fi-ta-content {
-                                    background: transparent !important;
-                                    box-shadow: none !important;
-                                    border: none !important;
-                                }
-                                
-                                /* Style each table row as a sleek premium Modrinth card */
-                                .fi-ta-row {
-                                    display: flex !important;
-                                    flex-direction: row !important;
-                                    align-items: center !important;
-                                    justify-content: space-between !important;
-                                    background-color: #1a1a1e !important; /* Rich sleek dark grey */
-                                    border: 1px solid #2d2f34 !important; /* Thin border */
-                                    border-radius: 12px !important;
-                                    padding: 16px 20px !important;
-                                    margin-bottom: 14px !important;
-                                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-                                    width: 100% !important;
-                                    box-sizing: border-box !important;
-                                }
-                                
-                                .fi-ta-row:hover {
-                                    border-color: #4b4f56 !important;
-                                    background-color: #202024 !important;
-                                    transform: translateY(-1px);
-                                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-                                }
-                                
-                                /* Base cell reset */
-                                .fi-ta-row > td {
-                                    border: none !important;
-                                    padding: 0 !important;
-                                    background: transparent !important;
-                                    display: flex !important;
-                                    align-items: center !important;
-                                    height: auto !important;
-                                    min-width: 0 !important;
-                                    box-sizing: border-box !important;
-                                }
-                                
-                                /* Checkbox column */
-                                .fi-ta-row > td:first-child {
-                                    margin-right: 16px !important;
-                                    flex-shrink: 0 !important;
-                                    display: flex !important;
-                                    align-items: center !important;
-                                    justify-content: center !important;
-                                    width: auto !important;
-                                }
-                                
-                                /* Title column */
-                                .fi-ta-row > td:nth-child(2) {
-                                    flex: 1 !important;
-                                    min-width: 0 !important;
-                                    display: block !important;
-                                }
-                                
-                                /* Ensure the inner Filament wrappers expand to fill the cell width on Installed tab */
-                                .fi-ta-row > td:nth-child(2) > div,
-                                .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
-                                .fi-ta-row > td:nth-child(2) .fi-ta-text {
-                                    width: 100% !important;
-                                    max-width: 100% !important;
-                                    display: block !important;
-                                }
-                                
-                                /* Version column */
-                                .fi-ta-row > td:nth-child(3) {
-                                    flex-shrink: 0 !important;
-                                    width: 220px !important;
-                                    margin-left: 24px !important;
-                                    margin-right: 24px !important;
-                                    display: flex !important;
-                                    align-items: center !important;
-                                }
-                                
-                                /* Status toggle switch column */
-                                .fi-ta-row > td:nth-child(4) {
-                                    flex-shrink: 0 !important;
-                                    width: 80px !important;
-                                    margin-right: 24px !important;
-                                    display: flex !important;
-                                    align-items: center !important;
-                                    justify-content: center !important;
-                                    color: transparent !important;
-                                }
-                                
-                                .fi-ta-row > td:nth-child(4) > div {
-                                    color: initial !important;
-                                }
-                                
-                                /* Default actions column alignment for Installed tab */
-                                .fi-ta-row > td:last-child {
-                                    flex-shrink: 0 !important;
-                                    display: inline-flex !important;
-                                    align-items: center !important;
-                                    gap: 12px !important;
-                                    justify-content: flex-end !important;
-                                }
-                                
-                                /* Prevent inner Filament padding/margins from breaking the layout */
-                                .fi-ta-col-wrp {
-                                    padding: 0 !important;
-                                    margin: 0 !important;
-                                }
-                                
-                                /* Format svg icons inside columns */
-                                .fi-ta-row > td svg {
-                                    color: #a1a1aa !important;
-                                }
-                                
-                                /* Style buttons inside cards to look premium and consistent */
-                                .fi-ta-row > td:last-child .fi-btn {
-                                    border-radius: 8px !important;
-                                    padding: 8px 16px !important;
-                                    font-size: 13px !important;
-                                    font-weight: 600 !important;
-                                    text-transform: none !important;
-                                    letter-spacing: normal !important;
-                                    box-shadow: none !important;
-                                    transition: all 0.2s ease !important;
-                                    border: 1px solid transparent !important;
-                                }
-                                
-                                /* Green pill buttons for Installed (disabled) */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
-                                    background-color: rgba(16, 185, 129, 0.1) !important;
-                                    border: 1px solid rgba(16, 185, 129, 0.2) !important;
-                                    color: #10b981 !important;
-                                    opacity: 0.9 !important;
-                                    cursor: default !important;
-                                }
-                                
-                                /* Green buttons for Install Latest / Install */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
-                                    background-color: #10b981 !important;
-                                    color: #ffffff !important;
-                                    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
-                                    background-color: #0d9488 !important;
-                                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
-                                }
-                                
-                                /* Warning buttons for Update */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
-                                    background-color: #f59e0b !important;
-                                    color: #ffffff !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
-                                    background-color: #d97706 !important;
-                                }
-                                
-                                /* Info/Gray buttons for Versions selection */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
-                                    background-color: rgba(255, 255, 255, 0.05) !important;
-                                    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-                                    color: #e4e4e7 !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
-                                    background-color: rgba(255, 255, 255, 0.1) !important;
-                                    border-color: rgba(255, 255, 255, 0.16) !important;
-                                }
-                                
-                                /* Danger buttons for Uninstall */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
-                                    background-color: rgba(239, 68, 68, 0.1) !important;
-                                    border: 1px solid rgba(239, 68, 68, 0.2) !important;
-                                    color: #ef4444 !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
-                                    background-color: rgba(239, 68, 68, 0.2) !important;
-                                    border-color: rgba(239, 68, 68, 0.3) !important;
-                                }
-                            </style>
-                            HTML;
-                        } else {
-                            $styleHtml = <<<HTML
-                            <style>
-                                /* Hide the column header row */
-                                .fi-ta-table thead {
-                                    display: none !important;
-                                }
-                                
-                                /* Remove standard table style and container shadow */
-                                .fi-ta-content {
-                                    background: transparent !important;
-                                    box-shadow: none !important;
-                                    border: none !important;
-                                }
-                                
-                                /* Style each table row as a sleek premium Modrinth card */
-                                .fi-ta-row {
-                                    display: flex !important;
-                                    flex-direction: row !important;
-                                    align-items: center !important;
-                                    justify-content: space-between !important;
-                                    background-color: #1a1a1e !important; /* Rich sleek dark grey */
-                                    border: 1px solid #2d2f34 !important; /* Thin border */
-                                    border-radius: 12px !important;
-                                    padding: 16px 20px !important;
-                                    margin-bottom: 14px !important;
-                                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-                                    width: 100% !important;
-                                    box-sizing: border-box !important;
-                                    position: relative !important; /* Crucial for absolute positioning of right panel items */
-                                    min-height: 114px !important;
-                                }
-                                
-                                .fi-ta-row:hover {
-                                    border-color: #4b4f56 !important;
-                                    background-color: #202024 !important;
-                                    transform: translateY(-1px);
-                                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-                                }
-                                
-                                /* Base cell reset */
-                                .fi-ta-row > td {
-                                    border: none !important;
-                                    padding: 0 !important;
-                                    background: transparent !important;
-                                    display: flex !important;
-                                    align-items: center !important;
-                                    height: auto !important;
-                                    min-width: 0 !important;
-                                    box-sizing: border-box !important;
-                                }
-                                
-                                /* Title cell (flex: 1) */
-                                .fi-ta-row > td:first-child {
-                                    flex: 1 !important;
-                                    min-width: 0 !important;
-                                    display: block !important;
-                                }
-                                
-                                /* Prevent description overlapping stats and buttons on the right */
-                                .fi-ta-row > td:first-child > div,
-                                .fi-ta-row .fi-ta-col-wrp,
-                                .fi-ta-row .fi-ta-text {
-                                    padding-right: 170px !important;
-                                    width: 100% !important;
-                                    max-width: 100% !important;
-                                    display: block !important;
-                                    box-sizing: border-box !important;
-                                }
-                                
-                                /* Hide downloads and date modified columns cell */
-                                .fi-ta-row > td:nth-child(2),
-                                .fi-ta-row > td:nth-child(3) {
-                                    display: none !important;
-                                }
-                                
-                                /* Absolute position actions cell on Browse tab */
-                                .fi-ta-row > td:last-child {
-                                    position: absolute !important;
-                                    right: 20px !important;
-                                    top: 16px !important;
-                                    margin: 0 !important;
-                                    padding: 0 !important;
-                                    height: auto !important;
-                                    z-index: 10 !important;
-                                    flex-shrink: 0 !important;
-                                    display: inline-flex !important;
-                                    align-items: center !important;
-                                    justify-content: flex-end !important;
-                                }
-                                
-                                /* Prevent inner Filament padding/margins from breaking the layout */
-                                .fi-ta-col-wrp {
-                                    padding: 0 !important;
-                                    margin: 0 !important;
-                                }
-                                
-                                /* Format svg icons inside columns */
-                                .fi-ta-row > td svg {
-                                    color: #a1a1aa !important;
-                                }
-                                
-                                /* Style buttons inside cards to look premium and consistent */
-                                .fi-ta-row > td:last-child .fi-btn {
-                                    border-radius: 8px !important;
-                                    padding: 8px 16px !important;
-                                    font-size: 13px !important;
-                                    font-weight: 600 !important;
-                                    text-transform: none !important;
-                                    letter-spacing: normal !important;
-                                    box-shadow: none !important;
-                                    transition: all 0.2s ease !important;
-                                    border: 1px solid transparent !important;
-                                }
-                                
-                                /* Green pill buttons for Installed (disabled) */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
-                                    background-color: rgba(16, 185, 129, 0.1) !important;
-                                    border: 1px solid rgba(16, 185, 129, 0.2) !important;
-                                    color: #10b981 !important;
-                                    opacity: 0.9 !important;
-                                    cursor: default !important;
-                                }
-                                
-                                /* Green buttons for Install Latest / Install */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
-                                    background-color: #10b981 !important;
-                                    color: #ffffff !important;
-                                    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
-                                    background-color: #0d9488 !important;
-                                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
-                                }
-                                
-                                /* Warning buttons for Update */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
-                                    background-color: #f59e0b !important;
-                                    color: #ffffff !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
-                                    background-color: #d97706 !important;
-                                }
-                                
-                                /* Info/Gray buttons for Versions selection */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
-                                    background-color: rgba(255, 255, 255, 0.05) !important;
-                                    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-                                    color: #e4e4e7 !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
-                                    background-color: rgba(255, 255, 255, 0.1) !important;
-                                    border-color: rgba(255, 255, 255, 0.16) !important;
-                                }
-                                
-                                /* Danger buttons for Uninstall */
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
-                                    background-color: rgba(239, 68, 68, 0.1) !important;
-                                    border: 1px solid rgba(239, 68, 68, 0.2) !important;
-                                    color: #ef4444 !important;
-                                }
-                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
-                                    background-color: rgba(239, 68, 68, 0.2) !important;
-                                    border-color: rgba(239, 68, 68, 0.3) !important;
-                                }
-                            </style>
-                            HTML;
-                        }
-                        
-                        if ($this->activeTab === 'installed') {
                             $authorUrl = "https://modrinth.com/user/" . urlencode($author);
                             $avatarUrl = $author === 'Unknown'
                                 ? 'https://cdn.modrinth.com/assets/images/default_avatar.png'
                                 : "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
                             
                             return new HtmlString("
-                                {$styleHtml}
                                 <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0; width: 100%;'>
                                     <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
                                     <div style='display: flex; flex-direction: column; gap: 6px;'>
@@ -1018,7 +907,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         }
                         
                         return new HtmlString("
-                            {$styleHtml}
                             <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0; width: 100%;'>
                                 <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
                                 <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; flex: 1; min-width: 0;'>
@@ -1433,6 +1321,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         try {
                             /** @var Server $server */
                             $server = Filament::getTenant();
+                            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
 
                             if (!empty($record['is_local'])) {
                                 $filename = $record['filename'];
@@ -1757,6 +1646,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
                             $this->installedModsMetadata = null;
                             $this->versionsCache = [];
+                            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
                             $this->js('$wire.$refresh()');
 
                             if ($resolved) {
@@ -2097,6 +1987,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
             $this->installedModsMetadata = null;
             $this->versionsCache = [];
+            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
             $this->js('$wire.$refresh()');
 
             Notification::make()
@@ -2124,6 +2015,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
             $this->installedModsMetadata = null;
             $this->versionsCache = [];
+            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
             $this->js('$wire.$refresh()');
 
             Notification::make()
@@ -2141,6 +2033,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         try {
             /** @var Server $server */
             $server = Filament::getTenant();
+            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
 
             $type = ModrinthProjectType::fromServer($server);
             if (!$type) {
@@ -2214,32 +2107,21 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             return ['has_disabled' => false, 'has_updates' => false];
         }
 
-        $fileRepository = app(DaemonFileRepository::class);
-        $installedModsMetadata = $this->getInstalledModsMetadata();
-
-        try {
-            $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
-            if (isset($files['error'])) {
-                $files = [];
-            }
-        } catch (Exception $e) {
-            $files = [];
-        }
+        $resolvedList = $this->getInstalledModsResolvedList($server, $type);
 
         $hasDisabled = false;
-        foreach ($files as $file) {
-            if (str_ends_with(strtolower($file['name']), '.jar.disabled')) {
-                $hasDisabled = true;
-                break;
-            }
-        }
-
         $hasUpdates = false;
-        foreach ($installedModsMetadata as $mod) {
-            $versions = $this->getCachedVersions($mod['project_id']);
-            if (!empty($versions) && $mod['version_id'] !== $versions[0]['id']) {
-                $hasUpdates = true;
-                break;
+
+        foreach ($resolvedList as $item) {
+            if (!empty($item['is_disabled'])) {
+                $hasDisabled = true;
+            }
+            if (empty($item['is_local']) && empty($item['unavailable'])) {
+                $versions = $this->getCachedVersions($item['project_id']);
+                $installedVersionId = $item['metadata']['version_id'] ?? null;
+                if (!empty($versions) && $installedVersionId !== $versions[0]['id']) {
+                    $hasUpdates = true;
+                }
             }
         }
 

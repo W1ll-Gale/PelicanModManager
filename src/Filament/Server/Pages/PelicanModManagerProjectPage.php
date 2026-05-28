@@ -934,26 +934,42 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $author = e($record['author'] ?? 'Unknown');
                         $iconUrl = $record['icon_url'] ?? null;
                         
-                        // Default package placeholder icon if empty
-                        if (empty($iconUrl)) {
-                            $iconUrl = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'></path><polyline points='3.27 6.96 12 12.01 20.73 6.96'></polyline><line x1='12' y1='22.08' x2='12' y2='12'></line></svg>";
+                        // Safe icon element: use a styled div+SVG placeholder when no icon_url
+                        // (avoids broken HTML from single-quoted SVG inside src='...' attribute)
+                        if (!empty($iconUrl)) {
+                            $iconEl = "<img src=\"" . e($iconUrl) . "\" style='width:72px;height:72px;border-radius:12px;object-fit:cover;border:1px solid rgba(255,255,255,0.08);flex-shrink:0;' />";
+                        } else {
+                            $iconEl = "<div style='width:72px;height:72px;border-radius:12px;background:#27272a;border:1px solid rgba(255,255,255,0.08);flex-shrink:0;display:flex;align-items:center;justify-content:center;'>"
+                                . "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#6b7280\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+                                . "<path d=\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z\"/>"
+                                . "<polyline points=\"3.27 6.96 12 12.01 20.73 6.96\"/>"
+                                . "<line x1=\"12\" y1=\"22.08\" x2=\"12\" y2=\"12\"/>"
+                                . "</svg></div>";
                         }
 
                         if ($this->activeTab === 'installed') {
-                            $authorUrl = "https://modrinth.com/user/" . urlencode($author);
-                            $avatarUrl = $author === 'Unknown'
-                                ? 'https://cdn.modrinth.com/assets/images/default_avatar.png'
-                                : "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
-                            
+                            $isLocal = !empty($record['is_local']);
+
+                            // Author row: hidden for local jars, hidden when Unknown
+                            if (!$isLocal && $author !== 'Unknown' && $author !== '') {
+                                $avatarUrl = "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
+                                $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                                $authorHtml = "<div style='display:flex;align-items:center;gap:6px;'>"
+                                    . "<img src=\"{$avatarUrl}\" style='width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);' />"
+                                    . "<a href=\"{$authorUrl}\" target='_blank' style='font-size:12px;color:#a1a1aa;text-decoration:none;' "
+                                    . "onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">"
+                                    . "{$author} <svg style='display:inline-block;width:10px;height:10px;margin-left:1px;vertical-align:baseline;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/><polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg>"
+                                    . "</a></div>";
+                            } else {
+                                $authorHtml = '';
+                            }
+
                             return new HtmlString("
-                                <div style='display: flex; align-items: center; gap: 16px; padding: 4px 0; width: 100%;'>
-                                    <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
-                                    <div style='display: flex; flex-direction: column; gap: 6px;'>
-                                        <span style='font-size: 16px; font-weight: 700; color: #ffffff;'>{$title}</span>
-                                        <div style='display: flex; align-items: center; gap: 6px;'>
-                                            <img src='{$avatarUrl}' style='width: 16px; height: 16px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(255,255,255,0.1);' />
-                                            <a href='{$authorUrl}' target='_blank' style='font-size: 12px; color: #a1a1aa; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #a1a1aa;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a>
-                                        </div>
+                                <div style='display:flex;align-items:center;gap:16px;padding:4px 0;width:100%;'>
+                                    {$iconEl}
+                                    <div style='display:flex;flex-direction:column;gap:6px;'>
+                                        <span style='font-size:16px;font-weight:700;color:#ffffff;'>{$title}</span>
+                                        {$authorHtml}
                                     </div>
                                 </div>
                             ");
@@ -1152,7 +1168,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         ");
                     })
                     ->description(null),
-                TextColumn::make('version')
+                TextColumn::make('filename')
                     ->label('Version')
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->wrap()
@@ -1213,7 +1229,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
 
                         // Oval toggle switch
-                        $bg        = $isEnabled ? '#10b981' : '#4b5563';
+                        $bg        = $isEnabled ? '#1BD96A' : '#27272a';
                         $thumbLeft = $isEnabled ? '22px' : '2px';
                         $toggleHtml = "
                             <div x-on:click.stop=\"\$wire.toggleModStatus('{$projectId}', '{$filename}', {$isEnabledJs})\"
@@ -1532,10 +1548,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         ->icon('tabler-link')
                         ->label('Copy link')
                         ->visible(fn (array $record) => empty($record['is_local']))
-                        ->extraAttributes(fn (array $record) => [
-                            'x-on:click.stop' => "navigator.clipboard.writeText('https://modrinth.com/mod/" . e($record['slug'] ?? $record['project_slug'] ?? '') . "').then(() => { \$dispatch('notify', {message: 'Link copied!'}) })",
-                        ])
-                        ->action(fn () => null),
+                        ->action(function (array $record) {
+                            $slug = e($record['slug'] ?? $record['project_slug'] ?? '');
+                            $this->js("navigator.clipboard.writeText('https://modrinth.com/mod/{$slug}')");
+                            Notification::make()->title('Link copied!')->success()->send();
+                        }),
                 ])
                 ->icon('tabler-dots-vertical')
                 ->visible(fn () => $this->activeTab === 'installed'),
@@ -2306,7 +2323,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             }
 
             Http::daemon($server->node)
-                ->post("/api/servers/{$server->uuid}/files/rename", [
+                ->put("/api/servers/{$server->uuid}/files/rename", [
                     'root' => '/',
                     'files' => [
                         [

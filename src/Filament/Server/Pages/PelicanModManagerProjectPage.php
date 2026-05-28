@@ -150,30 +150,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
             }
 
-            /* CELL RESET */
+            /* CELL RESET — block layout so content fills width naturally,
+               no dependency on Filament's internal wrapper class names */
             .fi-ta-row > td {
                 border: none !important;
                 padding: 0 !important;
                 background: transparent !important;
-                display: flex !important;
-                align-items: center !important;
+                display: block !important;
                 height: auto !important;
                 min-width: 0 !important;
                 box-sizing: border-box !important;
-            }
-
-            /* EXPAND ALL CELL WRAPPERS — needed because td is display:flex,
-               so every intermediate wrapper must also fill its parent or content collapses */
-            .fi-ta-row > td > div,
-            .fi-ta-row > td .fi-ta-col-wrp,
-            .fi-ta-row > td .fi-ta-text,
-            .fi-ta-row > td .fi-ta-text > div {
-                display: flex !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                min-width: 0 !important;
-                flex: 1 !important;
-                box-sizing: border-box !important;
+                overflow: visible !important;
             }
 
             /* HIDE VISUALLY UNUSED LABELS ON SMALL SCREENS OR HIDDEN TEXT */
@@ -256,51 +243,50 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         CSS;
 
         if ($this->activeTab === 'installed') {
+            // td[1]=checkbox, td[2]=title, td[3]=version, td[4]=toggle, td[last]=actions
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
-                /* Checkbox — kept visible for bulk uninstall */
+                /* Checkbox — flex so the checkbox input centres properly */
                 .fi-ta-row > td:first-child {
+                    display: flex !important;
                     flex-shrink: 0 !important;
                     width: auto !important;
                     margin-right: 12px !important;
-                    display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
                 }
 
-                /* Title — takes remaining space, vertically centred */
+                /* Title — takes remaining space */
                 .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
-                    display: flex !important;
-                    align-items: center !important;
+                    align-self: center !important;
                 }
 
-                /* Version + filename column */
+                /* Version + filename */
                 .fi-ta-row > td:nth-child(3) {
                     flex-shrink: 0 !important;
                     width: 180px !important;
                     margin-left: 20px !important;
                     margin-right: 20px !important;
-                    display: flex !important;
-                    align-items: center !important;
+                    align-self: center !important;
                 }
 
                 /* Enable/disable toggle */
                 .fi-ta-row > td:nth-child(4) {
+                    display: flex !important;
                     flex-shrink: 0 !important;
                     width: 60px !important;
                     margin-right: 20px !important;
-                    display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
                 }
 
                 /* Actions — Update and Uninstall side by side */
                 .fi-ta-row > td:last-child {
+                    display: flex !important;
                     flex-shrink: 0 !important;
-                    display: inline-flex !important;
                     flex-direction: row !important;
                     align-items: center !important;
                     gap: 10px !important;
@@ -309,31 +295,40 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             CSS;
         } else {
             // Browse Mods tab ('all')
-            // No checkbox column exists here — bulk actions are hidden for browse mode,
-            // so Filament omits the checkbox td entirely. Title is td:first-child.
+            // td[1]=checkbox, td[2]=title, td[3]=downloads, td[4]=date_modified, td[last]=actions
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
 
-                /* Title column — td:first-child (no checkbox in browse mode) */
+                /* Checkbox — collapse it, no bulk actions in browse mode */
                 .fi-ta-row > td:first-child {
+                    width: 0 !important;
+                    max-width: 0 !important;
+                    overflow: hidden !important;
+                    opacity: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    flex-shrink: 0 !important;
+                    min-width: 0 !important;
+                }
+
+                /* Title — takes all remaining space, top-aligned */
+                .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
-                    display: flex !important;
                     align-self: flex-start !important;
                 }
 
-                /* Hide the separate downloads and date_modified columns
-                   (their data is already embedded in the title column HTML) */
-                .fi-ta-row > td:nth-child(2),
-                .fi-ta-row > td:nth-child(3) {
+                /* Downloads and date_modified — hidden (data embedded in title HtmlString) */
+                .fi-ta-row > td:nth-child(3),
+                .fi-ta-row > td:nth-child(4) {
                     display: none !important;
                 }
 
-                /* Actions — flow layout, top-aligned, stacked vertically */
+                /* Actions — flex column, top-aligned */
                 .fi-ta-row > td:last-child {
+                    display: flex !important;
                     flex-shrink: 0 !important;
                     align-self: flex-start !important;
-                    display: flex !important;
                     flex-direction: column !important;
                     align-items: stretch !important;
                     gap: 8px !important;

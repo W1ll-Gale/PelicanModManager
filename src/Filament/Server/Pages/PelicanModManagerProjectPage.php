@@ -56,8 +56,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     public string $installedStatusFilter = 'all';
     public string $installedSearch = '';
+    public string $installedSortMode = 'alpha_asc';
     public bool $installedHasDisabled = false;
     public bool $installedHasUpdates = false;
+    public bool $installedUpdatesChecked = false;
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
@@ -325,16 +327,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 thead tr {
                     display: flex !important;
                     align-items: center !important;
-                    padding: 0 20px 10px 20px !important;
+                    padding: 0 20px !important;
+                    height: 52px !important;
                     margin-bottom: 4px !important;
-                    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+                    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
                 }
                 thead th {
                     display: block !important;
-                    font-size: 11px !important;
+                    font-size: 13px !important;
                     font-weight: 600 !important;
-                    color: #71717a !important;
-                    letter-spacing: 0.06em !important;
+                    color: #a1a1aa !important;
+                    letter-spacing: 0.04em !important;
                     text-transform: uppercase !important;
                     padding: 0 !important;
                     border: none !important;
@@ -353,10 +356,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 thead th:last-child   { display: none !important; }
                 /* Filament renders sort headers as buttons — keep their text styled */
                 thead th button, thead th span {
-                    font-size: 11px !important;
+                    font-size: 13px !important;
                     font-weight: 600 !important;
-                    color: #71717a !important;
-                    letter-spacing: 0.06em !important;
+                    color: #a1a1aa !important;
+                    letter-spacing: 0.04em !important;
                     text-transform: uppercase !important;
                     background: none !important;
                     border: none !important;
@@ -959,16 +962,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                     $combinedItems = $this->getInstalledModsResolvedList($server, $type);
 
-                    // Compute filter chip availability on the full unfiltered list
+                    // Compute cheap stats (no API calls)
                     $this->installedHasDisabled = collect($combinedItems)->contains(fn ($i) => !empty($i['is_disabled']));
-                    $this->installedHasUpdates = collect($combinedItems)
-                        ->filter(fn ($i) => empty($i['is_local']))
-                        ->contains(function ($i) {
-                            $versions = $this->getCachedVersions($i['project_id']);
-                            if (empty($versions)) return false;
-                            $meta = $i['metadata'] ?? null;
-                            return $meta && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '');
-                        });
+                    // installedHasUpdates is computed lazily via checkInstalledUpdates() (triggered
+                    // by x-init in the filter bar after first render) so it never blocks tab switching.
 
                     // 1. Apply search — use our own property (the Filament table search bar
                     //    is hidden for the installed tab; we render a custom input instead)
@@ -1006,32 +1003,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }));
                     }
 
-                    // Apply sorting if a sort column is active
-                    $sortColumn = $this->getTableSortColumn();
-                    $sortDirection = $this->getTableSortDirection();
-                    if ($sortColumn) {
-                        $descending = $sortDirection === 'desc';
-                        $combinedItems = collect($combinedItems)
-                            ->sortBy(function ($item) use ($sortColumn) {
-                                switch ($sortColumn) {
-                                    case 'title':
-                                        return strtolower($item['title'] ?? '');
-                                    case 'author':
-                                        return strtolower($item['author'] ?? '');
-                                    case 'downloads':
-                                        return (int)($item['downloads'] ?? 0);
-                                    case 'date_modified':
-                                        $dateStr = !empty($item['is_local']) 
-                                            ? ($item['date_modified'] ?? '') 
-                                            : ($item['metadata']['installed_at'] ?? '');
-                                        return $dateStr ? Carbon::parse($dateStr)->timestamp : 0;
-                                    default:
-                                        return strtolower($item['title'] ?? '');
-                                }
-                            }, SORT_REGULAR, $descending)
-                            ->values()
-                            ->toArray();
-                    }
+                    // Sort by installedSortMode
+                    $dateKey = fn ($i) => !empty($i['is_local'])
+                        ? ($i['date_modified'] ?? '')
+                        : ($i['metadata']['installed_at'] ?? '');
+                    $combinedItems = match ($this->installedSortMode) {
+                        'alpha_desc' => collect($combinedItems)->sortByDesc(fn ($i) => strtolower($i['title'] ?? ''))->values()->toArray(),
+                        'newest'     => collect($combinedItems)->sortByDesc($dateKey)->values()->toArray(),
+                        'oldest'     => collect($combinedItems)->sortBy($dateKey)->values()->toArray(),
+                        default      => collect($combinedItems)->sortBy(fn ($i) => strtolower($i['title'] ?? ''))->values()->toArray(),
+                    };
 
                     $totalItems = count($combinedItems);
 
@@ -2819,8 +2800,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $modType  = ModrinthProjectType::fromServer($server);
         $folderUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
 
+        // ── Lazy update-check trigger — fires once after render, uses server-side cache ──
+        // Uses the public installedUpdatesChecked flag to avoid redundant AJAX after first check.
+        $lazyCheck = "<div x-data x-init=\"\$nextTick(() => { if (!\$wire.installedUpdatesChecked) \$wire.call('checkInstalledUpdates'); })\" style='display:none'></div>";
+
         // ── Row 1: search input (left, wide) + Open folder + Upload files (right) ──
-        $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
+        $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
         $searchInput = "<div style='flex:1;position:relative;'>"
             . $searchSvg
             . "<input type='text' wire:model.live.debounce.300ms='installedSearch' placeholder='Search installed mods...' "
@@ -2828,21 +2813,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             . "onfocus=\"this.style.borderColor='rgba(27,217,106,0.4)'\" onblur=\"this.style.borderColor='rgba(255,255,255,0.1)'\"/>"
             . "</div>";
 
-        $headerBtnBase = "display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:#e4e4e7;white-space:nowrap;text-decoration:none;transition:background 0.15s ease;box-sizing:border-box;";
-        $headerBtnHov  = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
+        $hBtnBase = "display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:#e4e4e7;white-space:nowrap;text-decoration:none;transition:background 0.15s ease;box-sizing:border-box;";
+        $hBtnHov  = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
         $folderSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
         $uploadSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 16 12 12 8 16'/><line x1='12' y1='12' x2='12' y2='21'/><path d='M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3'/></svg>";
-        $folderBtn = "<a href=\"{$folderUrl}\" target='_blank' style=\"{$headerBtnBase}\"{$headerBtnHov}>{$folderSvg}Open folder</a>";
-        $uploadBtn = "<button type='button' wire:click=\"mountAction('upload_mod')\" style=\"{$headerBtnBase}\"{$headerBtnHov}>{$uploadSvg}Upload files</button>";
-
         $row1 = "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
-            . $searchInput . $folderBtn . $uploadBtn
+            . $searchInput
+            . "<a href=\"{$folderUrl}\" target='_blank' style=\"{$hBtnBase}\"{$hBtnHov}>{$folderSvg}Open folder</a>"
+            . "<button type='button' wire:click=\"mountAction('upload_mod')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$uploadSvg}Upload files</button>"
             . "</div>";
 
-        // ── Row 2: filter chips (left) + Update all + Refresh (right) ──
+        // ── Row 2: filter icon + chips + sort (left) | Update all + Refresh (right) ──
         $chipBase   = "display:inline-flex;align-items:center;padding:5px 14px;border-radius:9999px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid;transition:all 0.15s ease;background:none;";
         $chipActive = $chipBase . "border-color:rgba(27,217,106,0.5);color:#1bd96a;background:rgba(27,217,106,0.1);";
         $chipOff    = $chipBase . "border-color:rgba(255,255,255,0.1);color:#a1a1aa;";
+
+        $filterIcon = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#6b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3'/></svg>";
 
         $chips = '';
         foreach (['all' => 'All', 'updates' => 'Updates', 'enabled' => 'Enabled', 'disabled' => 'Disabled'] as $key => $label) {
@@ -2852,6 +2838,36 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $hov   = $cur !== $key ? " onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.1)'\"" : '';
             $chips .= "<button type='button' wire:click=\"setInstalledFilter('{$key}')\" style=\"{$style}\"{$hov}>{$label}</button>";
         }
+
+        // Sort dropdown
+        $sortLabels = ['alpha_asc' => 'Alphabetical A→Z', 'alpha_desc' => 'Alphabetical Z→A', 'newest' => 'Newest first', 'oldest' => 'Oldest first'];
+        $curSortLabel = $sortLabels[$this->installedSortMode] ?? 'Alphabetical A→Z';
+        $listSvg  = "<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>";
+        $chevSvg  = "<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>";
+        $checkSvg = "<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
+        $sortOpts = '';
+        foreach ($sortLabels as $k => $lbl) {
+            $active = $this->installedSortMode === $k;
+            $icon   = $active ? $checkSvg : "<span style='width:12px;display:inline-block'></span>";
+            $color  = $active ? '#1bd96a' : '#e4e4e7';
+            $sortOpts .= "<button type='button' wire:click=\"setInstalledSort('{$k}')\" x-on:click=\"open=false\" "
+                . "style='display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500;color:{$color};background:transparent;border:none;cursor:pointer;white-space:nowrap;text-align:left;' "
+                . "onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\" onmouseout=\"this.style.background='transparent'\">"
+                . $icon . e($lbl) . "</button>";
+        }
+        $sortDropdown = "<div x-data=\"{ open:false }\" style='position:relative;display:inline-flex;'>"
+            . "<button type='button' x-on:click=\"open=!open\" x-on:click.away=\"open=false\" "
+            . "style='display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:9999px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.1);color:#a1a1aa;background:none;transition:all 0.15s ease;' "
+            . "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.1)'\">"
+            . $listSvg . " " . e($curSortLabel) . " " . $chevSvg
+            . "</button>"
+            . "<div x-show='open' x-cloak style='position:absolute;top:calc(100% + 6px);left:0;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:185px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'>"
+            . $sortOpts
+            . "</div></div>";
+
+        $leftGroup = "<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;'>"
+            . "<span style='display:inline-flex;align-items:center;margin-right:2px;'>{$filterIcon}</span>"
+            . $chips . $sortDropdown . "</div>";
 
         $rightBtns = '';
         if ($hasUpdates) {
@@ -2868,11 +2884,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             . "Refresh</button>";
 
         $row2 = "<div style='display:flex;align-items:center;justify-content:space-between;'>"
-            . "<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;'>{$chips}</div>"
+            . $leftGroup
             . "<div style='display:flex;gap:8px;align-items:center;'>{$rightBtns}</div>"
             . "</div>";
 
-        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$row1}{$row2}</div>";
+        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$lazyCheck}{$row1}{$row2}</div>";
     }
 
     public function setInstalledFilter(string $filter): void
@@ -2880,18 +2896,69 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->installedStatusFilter = $filter;
     }
 
-    public function refreshInstalled(): void
+    public function setInstalledSort(string $mode): void
     {
-        $this->installedModsMetadata = null;
-        $this->versionsCache = [];
+        $allowed = ['alpha_asc', 'alpha_desc', 'newest', 'oldest'];
+        if (in_array($mode, $allowed, true)) {
+            $this->installedSortMode = $mode;
+        }
+    }
+
+    /**
+     * Livewire lifecycle hook — fires when $activeTab changes.
+     * Resets the lazy-check flag so the Updates check re-runs when switching to installed.
+     */
+    public function updatedActiveTab(): void
+    {
+        if ($this->activeTab === 'installed') {
+            $this->installedUpdatesChecked = false;
+        }
+    }
+
+    /**
+     * Triggered lazily from the filter bar's x-init after the page renders.
+     * Uses a 5-minute Laravel cache so repeated calls (filter clicks, search, etc.) are instant.
+     */
+    public function checkInstalledUpdates(): void
+    {
+        if ($this->activeTab !== 'installed') return;
+
         /** @var Server $server */
         $server = Filament::getTenant();
-        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-        // Also bust all per-project version caches for this server
+        $cacheKey = "pmm_has_updates_{$server->uuid}";
+
+        $this->installedHasUpdates = cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server) {
+            $type = ModrinthProjectType::fromServer($server);
+            if (!$type) return false;
+            foreach ($this->getInstalledModsResolvedList($server, $type) as $item) {
+                if (!empty($item['is_local'])) continue;
+                $versions = $this->getCachedVersions($item['project_id']);
+                if (empty($versions)) continue;
+                $meta = $item['metadata'] ?? null;
+                if ($meta && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        $this->installedUpdatesChecked = true;
+    }
+
+    public function refreshInstalled(): void
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        // Bust per-project version caches before clearing the metadata
         foreach ($this->getInstalledModsMetadata() as $mod) {
             cache()->forget("pmm_versions_{$mod['project_id']}_{$server->uuid}");
         }
         $this->installedModsMetadata = null;
+        $this->versionsCache = [];
+        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        cache()->forget("pmm_has_updates_{$server->uuid}");
+        $this->installedHasUpdates = false;
+        $this->installedUpdatesChecked = false; // triggers re-check after render
         $this->js('$wire.$refresh()');
         Notification::make()->title('Refreshed')->success()->send();
     }

@@ -573,6 +573,121 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     }
 
     /** @return array<int, mixed> */
+    protected function buildVersionsSections(string $projectId, array $record = []): array
+    {
+        if (empty($record['project_id'])) {
+            $record['project_id'] = $projectId;
+        }
+
+        $versions = $this->getCachedVersions($projectId);
+        $installedMod = $this->getInstalledMod($projectId);
+        $installedVersionId = $installedMod['version_id'] ?? null;
+
+        $sections = [];
+        foreach ($versions as $versionIndex => $versionData) {
+            $primaryFile = $this->getPrimaryFile($versionData['files'] ?? []);
+
+            $sectionComponents = [
+                TextEntry::make('type_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.version.type'))
+                    ->state($versionData['version_type'] ?? '')
+                    ->badge()
+                    ->color(match ($versionData['version_type'] ?? '') {
+                        'release' => 'success',
+                        'beta' => 'warning',
+                        'alpha' => 'danger',
+                        default => 'gray',
+                    }),
+                TextEntry::make('downloads_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.version.downloads'))
+                    ->state($versionData['downloads'] ?? 0)
+                    ->icon('tabler-download')
+                    ->numeric(),
+                TextEntry::make('published_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.version.published'))
+                    ->state(fn () => isset($versionData['date_published']) ? Carbon::parse($versionData['date_published'], 'UTC')->diffForHumans() : ''),
+            ];
+
+            if (!empty($versionData['changelog'])) {
+                $sectionComponents[] = TextEntry::make('changelog_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.version.changelog'))
+                    ->state($versionData['changelog'])
+                    ->markdown();
+            }
+
+            if (($versionData['id'] ?? null) === $installedVersionId) {
+                $headerAction = Action::make('installed_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.actions.installed'))
+                    ->icon('tabler-check')
+                    ->color('success')
+                    ->disabled();
+                $sectionIcon = 'tabler-check';
+                $sectionIconColor = 'success';
+            } else {
+                $headerAction = Action::make('install_version_' . $versionIndex)
+                    ->label(trans('pelican-mod-manager::strings.actions.install'))
+                    ->icon('tabler-download')
+                    ->visible($primaryFile !== null)
+                    ->action(function () use ($record, $versionData, $primaryFile) {
+                        try {
+                            /** @var Server $server */
+                            $server = Filament::getTenant();
+
+                            if (!$primaryFile) {
+                                throw new Exception('No downloadable file found');
+                            }
+
+                            $installedMod = $this->getInstalledMod($record['project_id']);
+
+                            $this->performInstallOrUpdate($server, $record, $versionData, $primaryFile, $installedMod);
+
+                            $this->installedModsMetadata = null;
+                            $this->versionsCache = [];
+                            $this->js('$wire.$refresh()');
+
+                            Notification::make()
+                                ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.install_success_body', [
+                                    'name' => $record['title'] ?? $record['project_id'],
+                                    'version' => $versionData['version_number'],
+                                ]))
+                                ->success()
+                                ->send();
+                        } catch (Exception $exception) {
+                            report($exception);
+
+                            $this->installedModsMetadata = null;
+                            $this->versionsCache = [];
+                            $this->js('$wire.$refresh()');
+
+                            Notification::make()
+                                ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.install_failed_body'))
+                                ->danger()
+                                ->send();
+                        }
+                    });
+                $sectionIcon = null;
+                $sectionIconColor = null;
+            }
+
+            $section = Section::make($versionData['version_number'] ?? '')
+                ->headerActions([$headerAction])
+                ->schema($sectionComponents)
+                ->collapsible()
+                ->collapsed(!($versionData['featured'] ?? false));
+
+            if ($sectionIcon !== null) {
+                $section = $section->icon($sectionIcon)->iconColor($sectionIconColor);
+            }
+
+            $sections[] = $section;
+        }
+
+        return $sections;
+    }
+
+    /** @return array<int, mixed> */
     protected function getCachedVersions(string $projectId): array
     {
         if (!isset($this->versionsCache[$projectId])) {
@@ -934,7 +1049,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.mountTableAction('versions', '{$projectId}')\"
+                                x-on:click.stop=\"\$wire.mountAction('browse_versions', {projectId: '{$projectId}', title: '{$title}'})\"
                                 style=\"{$btnBase} border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#c4c4c8;\"
                                 onmouseover=\"this.style.background='rgba(255,255,255,0.1)'\"
                                 onmouseout=\"this.style.background='rgba(255,255,255,0.05)'\">
@@ -1127,115 +1242,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->label(trans('pelican-mod-manager::strings.actions.versions'))
                     ->visible(fn (array $record) => empty($record['unavailable']))
                     ->modalSubmitAction(false)
-                    ->schema(function (array $record) {
-                        $versions = $this->getCachedVersions($record['project_id']);
-
-                        $installedMod = $this->getInstalledMod($record['project_id']);
-                        $installedVersionId = $installedMod['version_id'] ?? null;
-
-                        $sections = [];
-                        foreach ($versions as $versionIndex => $versionData) {
-                            $primaryFile = $this->getPrimaryFile($versionData['files'] ?? []);
-
-                            $sectionComponents = [
-                                TextEntry::make('type_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.version.type'))
-                                    ->state($versionData['version_type'] ?? '')
-                                    ->badge()
-                                    ->color(match ($versionData['version_type'] ?? '') {
-                                        'release' => 'success',
-                                        'beta' => 'warning',
-                                        'alpha' => 'danger',
-                                        default => 'gray',
-                                    }),
-                                TextEntry::make('downloads_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.version.downloads'))
-                                    ->state($versionData['downloads'] ?? 0)
-                                    ->icon('tabler-download')
-                                    ->numeric(),
-                                TextEntry::make('published_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.version.published'))
-                                    ->state(fn () => isset($versionData['date_published']) ? Carbon::parse($versionData['date_published'], 'UTC')->diffForHumans() : ''),
-                            ];
-
-                            if (!empty($versionData['changelog'])) {
-                                $sectionComponents[] = TextEntry::make('changelog_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.version.changelog'))
-                                    ->state($versionData['changelog'])
-                                    ->markdown();
-                            }
-
-                            if (($versionData['id'] ?? null) === $installedVersionId) {
-                                $headerAction = Action::make('installed_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.actions.installed'))
-                                    ->icon('tabler-check')
-                                    ->color('success')
-                                    ->disabled();
-                                $sectionIcon = 'tabler-check';
-                                $sectionIconColor = 'success';
-                            } else {
-                                $headerAction = Action::make('install_version_' . $versionIndex)
-                                    ->label(trans('pelican-mod-manager::strings.actions.install'))
-                                    ->icon('tabler-download')
-                                    ->visible($primaryFile !== null)
-                                    ->action(function () use ($record, $versionData, $primaryFile) {
-                                        try {
-                                            /** @var Server $server */
-                                            $server = Filament::getTenant();
-
-                                            if (!$primaryFile) {
-                                                throw new Exception('No downloadable file found');
-                                            }
-
-                                            $installedMod = $this->getInstalledMod($record['project_id']);
-
-                                            $this->performInstallOrUpdate($server, $record, $versionData, $primaryFile, $installedMod);
-
-                                            $this->installedModsMetadata = null;
-                                            $this->versionsCache = [];
-                                            $this->js('$wire.$refresh()');
-
-                                            Notification::make()
-                                                ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
-                                                ->body(trans('pelican-mod-manager::strings.notifications.install_success_body', [
-                                                    'name' => $record['title'],
-                                                    'version' => $versionData['version_number'],
-                                                ]))
-                                                ->success()
-                                                ->send();
-                                        } catch (Exception $exception) {
-                                            report($exception);
-
-                                            $this->installedModsMetadata = null;
-                                            $this->versionsCache = [];
-                                            $this->js('$wire.$refresh()');
-
-                                            Notification::make()
-                                                ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
-                                                ->body(trans('pelican-mod-manager::strings.notifications.install_failed_body'))
-                                                ->danger()
-                                                ->send();
-                                        }
-                                    });
-                                $sectionIcon = null;
-                                $sectionIconColor = null;
-                            }
-
-                            $section = Section::make($versionData['version_number'] ?? '')
-                                ->headerActions([$headerAction])
-                                ->schema($sectionComponents)
-                                ->collapsible()
-                                ->collapsed(!($versionData['featured'] ?? false));
-
-                            if ($sectionIcon !== null) {
-                                $section = $section->icon($sectionIcon)->iconColor($sectionIconColor);
-                            }
-
-                            $sections[] = $section;
-                        }
-
-                        return $sections;
-                    }),
+                    ->schema(fn (array $record) => $this->buildVersionsSections($record['project_id'], $record)),
                 Action::make('install_latest')
                     ->icon('tabler-download')
                     ->color('success')
@@ -1596,6 +1603,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $folder = $type->getFolder();
 
         return [
+            // Hidden page action used by the browse tab's Version Selection button.
+            // Using mountAction() avoids the table record lookup that mountTableAction()
+            // requires, which can fail for API-sourced browse records.
+            Action::make('browse_versions')
+                ->hidden()
+                ->label(trans('pelican-mod-manager::strings.actions.versions'))
+                ->modalSubmitAction(false)
+                ->schema(fn (array $arguments) => $this->buildVersionsSections(
+                    $arguments['projectId'] ?? '',
+                    ['project_id' => $arguments['projectId'] ?? '', 'title' => $arguments['title'] ?? '']
+                )),
             Action::make('open_folder')
                 ->tooltip(fn () => trans('pelican-mod-manager::strings.page.open_folder', ['folder' => $folder]))
                 ->icon('tabler-folder-open')

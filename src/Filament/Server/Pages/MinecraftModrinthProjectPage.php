@@ -101,8 +101,21 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
     protected function getDynamicStyles(): string
     {
         $sharedCss = <<<CSS
+            /* FORCE TABLE ELEMENTS TO BLOCK LAYOUT */
+            .fi-ta-table,
+            .fi-ta-table tbody,
+            table,
+            tbody {
+                display: block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
             /* HIDE COLUMN HEADERS */
-            .fi-ta-content thead {
+            .fi-ta-content thead,
+            table thead,
+            .fi-ta-table thead,
+            thead {
                 display: none !important;
             }
 
@@ -146,6 +159,19 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 align-items: center !important;
                 height: auto !important;
                 min-width: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            /* OVERRIDE FILAMENT TEXT COLUMN WRAPPERS TO TAKE FULL WIDTH */
+            .fi-ta-row > td > div,
+            .fi-ta-row > td .fi-ta-col-wrp,
+            .fi-ta-row > td .fi-ta-text,
+            .fi-ta-row > td .fi-ta-text > div {
+                display: flex !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                flex: 1 !important;
                 box-sizing: border-box !important;
             }
 
@@ -243,15 +269,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
-                    display: block !important;
-                }
-
-                .fi-ta-row > td:nth-child(2) > div,
-                .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
-                .fi-ta-row > td:nth-child(2) .fi-ta-text {
-                    width: 100% !important;
-                    max-width: 100% !important;
-                    display: block !important;
+                    display: flex !important;
                 }
 
                 .fi-ta-row > td:nth-child(3) {
@@ -270,11 +288,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
-                    color: transparent !important;
-                }
-
-                .fi-ta-row > td:nth-child(4) > div {
-                    color: initial !important;
                 }
 
                 .fi-ta-row > td:last-child {
@@ -297,15 +310,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 .fi-ta-row > td:first-child {
                     flex: 1 !important;
                     min-width: 0 !important;
-                    display: block !important;
+                    display: flex !important;
                 }
 
                 .fi-ta-row > td:first-child > div,
                 .fi-ta-row > td:first-child .fi-ta-col-wrp {
                     padding-right: 170px !important;
-                    width: 100% !important;
-                    max-width: 100% !important;
-                    display: block !important;
                     box-sizing: border-box !important;
                 }
 

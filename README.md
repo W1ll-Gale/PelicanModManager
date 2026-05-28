@@ -2,7 +2,7 @@
 
 A Minecraft mod and plugin manager for Pelican server panels, using Modrinth.
 
-This is a standalone fork of the original [Minecraft Modrinth](https://hub.pelican.dev/plugins/minecraft-modrinth) plugin by Boy132 & H1ghSyst3m, with major performance improvements and card layout styling changes.
+This is a standalone fork of the original [Minecraft Modrinth](https://github.com/pelican-dev/plugins/tree/main/minecraft-modrinth) plugin by Boy132 & H1ghSyst3m, with major performance improvements and card layout styling changes.
 
 ## Features
 
@@ -37,4 +37,4 @@ Based on the original **Minecraft Modrinth** plugin by:
 - **H1ghSyst3m** (Co-developer)
 
 ## License
-MIT
+GNU

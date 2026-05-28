@@ -54,6 +54,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public ?array $importFilesToDownload = null;
     public ?array $importDownloadedMods = [];
 
+    public string $browseSearch = '';
+    public string $browseSortMode = 'relevance';
     public string $installedStatusFilter = 'all';
     public string $installedSearch = '';
     public string $installedSortMode = 'alpha_asc';
@@ -211,6 +213,24 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 background: transparent !important;
                 padding: 0 !important;
                 box-shadow: none !important;
+            }
+
+            /* Strip Filament wrapper styling from browse filter bar */
+            div:has(> .pmm-browse-bar),
+            .fi-in-text:has(.pmm-browse-bar),
+            .fi-in-entry-wrp:has(.pmm-browse-bar) {
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+            }
+
+            /* Hide Filament's built-in table toolbar (search bar + column toggle) for
+               ALL tabs — both tabs use their own custom search bars. */
+            .fi-ta-header,
+            .fi-ta-header-toolbar,
+            .fi-ta-search {
+                display: none !important;
             }
 
             /* --- SHARED STYLINGS --- */
@@ -379,14 +399,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     border: none !important;
                     padding: 0 !important;
                     cursor: default !important;
-                }
-
-                /* Hide Filament's built-in table toolbar (search + any remaining header actions)
-                   for the installed tab — we render our own search input in the filter bar. */
-                .fi-ta-header,
-                .fi-ta-header-toolbar,
-                .fi-ta-search {
-                    display: none !important;
                 }
 
                 /* --- FILTER BAR wrapper stripping --- */
@@ -1040,9 +1052,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     // Return ALL installed items on a single page (pagination disabled for installed tab)
                     return new LengthAwarePaginator($combinedItems, $totalItems, max($totalItems, 1), 1);
                 } else {
-                    $sortColumn = $this->getTableSortColumn();
-                    $sortDirection = $this->getTableSortDirection();
-                    $response = PelicanModManager::getProjects($server, $page, $search, $sortColumn, $sortDirection);
+                    // Map browse sort modes to column/direction pairs the API knows
+                    $browseSortMap = [
+                        'downloads' => ['downloads', 'desc'],
+                        'follows'   => ['follows',   'desc'],
+                        'newest'    => ['date_modified', 'desc'],
+                        'updated'   => ['date_modified', 'asc'],
+                    ];
+                    [$bCol, $bDir] = $browseSortMap[$this->browseSortMode] ?? [null, null];
+                    $response = PelicanModManager::getProjects($server, $page, $this->browseSearch, $bCol, $bDir);
 
                     return new LengthAwarePaginator($response['hits'], $response['total_hits'], 20, $page);
                 }
@@ -1052,8 +1070,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->columns([
                 TextColumn::make('title')
                     ->label(fn () => $this->activeTab === 'installed' ? 'Mod' : 'Title')
-                    ->searchable()
-                    ->sortable()
                     ->wrap()
                     ->formatStateUsing(function ($state, $record) {
                         $title  = e($record['title'] ?? $state ?? '');
@@ -1525,23 +1541,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->formatStateUsing(function ($state) {
                         if (!$state) return '0';
                         $num = (int)$state;
-                        if ($num >= 1000000) {
-                            return round($num / 1000000, 2) . 'M';
-                        }
-                        if ($num >= 1000) {
-                            return round($num / 1000, 1) . 'K';
-                        }
+                        if ($num >= 1000000) return round($num / 1000000, 2) . 'M';
+                        if ($num >= 1000) return round($num / 1000, 1) . 'K';
                         return $num;
                     })
-                    ->sortable()
-                    ->toggleable()
                     ->visible(fn () => $this->activeTab === 'all'),
                 TextColumn::make('date_modified')
                     ->icon('tabler-clock')
                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state, 'UTC')->diffForHumans() : '')
                     ->tooltip(fn ($state) => $state ? Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()) : '')
-                    ->sortable()
-                    ->toggleable()
                     ->visible(fn () => $this->activeTab === 'all'),
             ])
             ->recordActions([
@@ -2802,6 +2810,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->badge(),
                     ]),
                 $this->getTabsContentComponent(),
+                TextEntry::make('browse_filter_bar')
+                    ->hiddenLabel()
+                    ->hidden(fn () => $this->activeTab === 'installed')
+                    ->state(fn () => new HtmlString($this->renderBrowseFilterBar())),
                 // Loading skeleton — visible only until the second Livewire request
                 // populates the data (loadInstalledData sets installedDataReady=true).
                 TextEntry::make('installed_loading')
@@ -2873,7 +2885,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $chips .= "<button type='button' wire:click=\"setInstalledFilter('{$key}')\" style=\"{$style}\"{$hov}>{$label}</button>";
         }
 
-        // Sort dropdown
+        // Sort dropdown — uses x-teleport='body' so it appears above the table regardless of stacking context
         $sortLabels = ['alpha_asc' => 'Alphabetical A→Z', 'alpha_desc' => 'Alphabetical Z→A', 'newest' => 'Newest first', 'oldest' => 'Oldest first'];
         $curSortLabel = $sortLabels[$this->installedSortMode] ?? 'Alphabetical A→Z';
         $listSvg  = "<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>";
@@ -2889,15 +2901,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 . "onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\" onmouseout=\"this.style.background='transparent'\">"
                 . $icon . e($lbl) . "</button>";
         }
-        $sortDropdown = "<div x-data=\"{ open:false }\" style='position:relative;display:inline-flex;'>"
-            . "<button type='button' x-on:click=\"open=!open\" x-on:click.away=\"open=false\" "
+        // .stop prevents the click bubbling to document so click.away on the teleported panel doesn't misfire
+        $sortDropdown = "<div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>"
+            . "<button type='button' x-ref='sortbtn' "
+            . "x-on:click.stop=\"if(!open){let r=\$refs.sortbtn.getBoundingClientRect();py=r.bottom+6;px=r.left;} open=!open\" "
             . "style='display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:9999px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.1);color:#a1a1aa;background:none;transition:all 0.15s ease;' "
             . "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.1)'\">"
             . $listSvg . " " . e($curSortLabel) . " " . $chevSvg
             . "</button>"
-            . "<div x-show='open' x-cloak style='position:absolute;top:calc(100% + 6px);left:0;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:185px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'>"
+            . "<template x-teleport='body'>"
+            . "<div x-show='open' x-cloak x-on:click.away='open=false' "
+            . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:185px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'\">"
             . $sortOpts
-            . "</div></div>";
+            . "</div></template></div>";
 
         $leftGroup = "<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;'>"
             . "<span style='display:inline-flex;align-items:center;margin-right:2px;'>{$filterIcon}</span>"
@@ -2936,6 +2952,68 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         if (in_array($mode, $allowed, true)) {
             $this->installedSortMode = $mode;
         }
+    }
+
+    public function setBrowseSort(string $mode): void
+    {
+        $allowed = ['relevance', 'downloads', 'follows', 'newest', 'updated'];
+        if (in_array($mode, $allowed, true)) {
+            $this->browseSortMode = $mode;
+        }
+    }
+
+    protected function renderBrowseFilterBar(): string
+    {
+        $sortLabels = [
+            'relevance' => 'Relevance',
+            'downloads' => 'Downloads',
+            'follows'   => 'Follows',
+            'newest'    => 'Newest',
+            'updated'   => 'Last updated',
+        ];
+        $curSortLabel = $sortLabels[$this->browseSortMode] ?? 'Relevance';
+
+        // Search bar (full-width)
+        $searchSvg = "<svg style='position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
+        $searchBar = "<div style='position:relative;margin-bottom:10px;'>"
+            . $searchSvg
+            . "<input type='text' wire:model.live.debounce.400ms='browseSearch' placeholder='Search mods...' "
+            . "style='width:100%;padding:10px 16px 10px 40px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#f3f4f6;font-size:14px;outline:none;box-sizing:border-box;transition:border-color 0.15s ease;' "
+            . "onfocus=\"this.style.borderColor='rgba(27,217,106,0.4)'\" onblur=\"this.style.borderColor='rgba(255,255,255,0.1)'\"/>"
+            . "</div>";
+
+        // Sort dropdown (x-teleport so it appears above the table)
+        $listSvg  = "<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>";
+        $chevSvg  = "<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>";
+        $checkSvg = "<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
+
+        $sortOpts = '';
+        foreach ($sortLabels as $k => $lbl) {
+            $active = $this->browseSortMode === $k;
+            $icon   = $active ? $checkSvg : "<span style='width:12px;display:inline-block'></span>";
+            $color  = $active ? '#1bd96a' : '#e4e4e7';
+            $sortOpts .= "<button type='button' wire:click=\"setBrowseSort('{$k}')\" x-on:click=\"open=false\" "
+                . "style='display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500;color:{$color};background:transparent;border:none;cursor:pointer;white-space:nowrap;text-align:left;' "
+                . "onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\" onmouseout=\"this.style.background='transparent'\">"
+                . $icon . e($lbl) . "</button>";
+        }
+
+        $sortDropdown = "<div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>"
+            . "<button type='button' x-ref='bsortbtn' "
+            . "x-on:click.stop=\"if(!open){let r=\$refs.bsortbtn.getBoundingClientRect();py=r.bottom+6;px=r.left;} open=!open\" "
+            . "style='display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.12);color:#a1a1aa;background:rgba(255,255,255,0.04);transition:all 0.15s ease;' "
+            . "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.12)'\">"
+            . "<span style='color:#6b7280;font-weight:400;margin-right:2px;'>Sort by:</span> " . e($curSortLabel) . " " . $chevSvg
+            . "</button>"
+            . "<template x-teleport='body'>"
+            . "<div x-show='open' x-cloak x-on:click.away='open=false' "
+            . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:175px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'\">"
+            . $sortOpts
+            . "</div></template></div>";
+
+        $row2 = "<div style='display:flex;align-items:center;gap:8px;'>{$sortDropdown}</div>";
+
+        return "<div class='pmm-browse-bar' style='padding:0 0 8px 0;'>{$searchBar}{$row2}</div>";
     }
 
     /**

@@ -98,7 +98,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->loadDefaultActiveTab();
     }
 
-    protected function getTableRecordKey(mixed $record): string
+    public function getTableRecordKey(mixed $record): string
     {
         if (is_array($record) && isset($record['project_id'])) {
             return (string) $record['project_id'];

@@ -261,7 +261,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         CSS;
 
         if ($this->activeTab === 'installed') {
-            // td[1]=checkbox, td[2]=Mod, td[3]=Version, td[last]=Actions
+            // td[1]=checkbox, td[2]=Mod, td[3]=Version, td[4]=⇄+Toggle, td[last]=🗑+⋮
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
@@ -275,7 +275,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     justify-content: center !important;
                 }
 
-                /* Mod — takes remaining space */
+                /* Mod — takes all remaining space */
                 .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
@@ -287,11 +287,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     flex-shrink: 0 !important;
                     width: 200px !important;
                     margin-left: 20px !important;
-                    margin-right: 20px !important;
                     align-self: center !important;
                 }
 
-                /* Actions — icon buttons + three-dot, right-aligned */
+                /* Change-version button + toggle switch */
+                .fi-ta-row > td:nth-child(4) {
+                    display: flex !important;
+                    flex-shrink: 0 !important;
+                    align-items: center !important;
+                    margin-left: 12px !important;
+                    margin-right: 4px !important;
+                }
+
+                /* Delete + three-dot — right-aligned */
                 .fi-ta-row > td:last-child {
                     display: flex !important;
                     flex-shrink: 0 !important;
@@ -1154,10 +1162,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $filename = e($record['filename'] ?? '');
                         $projectId = e($record['project_id'] ?? '');
 
+                        $title = e($record['title'] ?? '');
+
                         // Clickable version number opens the version changelog modal (unless local file)
                         if (!$isLocal && $projectId) {
                             $versionHtml = "<span
-                                x-on:click.stop=\"\$wire.mountTableAction('versions', '{$projectId}')\"
+                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
                                 style='font-size:14px; font-weight:700; color:#f3f4f6; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;'
                                 title='View versions'>{$version}</span>";
                         } else {
@@ -1168,6 +1178,54 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             <div style='display:flex; flex-direction:column; gap:4px; align-items:flex-start; text-align:left;'>
                                 {$versionHtml}
                                 <span style='font-size:11px; color:#6b7280; font-family:monospace; word-break:break-all; max-width:250px;'>{$filename}</span>
+                            </div>
+                        ");
+                    }),
+                // Change-version button + enable/disable toggle — installed tab only
+                TextColumn::make('is_disabled')
+                    ->label('')
+                    ->visible(fn () => $this->activeTab === 'installed')
+                    ->formatStateUsing(function ($state, $record) {
+                        $projectId = e($record['project_id'] ?? '');
+                        $title     = e($record['title'] ?? '');
+                        $filename  = e($record['filename'] ?? '');
+                        $isLocal   = !empty($record['is_local']);
+                        $isEnabled = empty($record['is_disabled']);
+                        $isEnabledJs = $isEnabled ? 'true' : 'false';
+
+                        // Change-version button (hidden for local mods with no projectId)
+                        $changeVersionBtn = '';
+                        if (!$isLocal && $projectId) {
+                            $changeVersionBtn = "
+                                <button type='button'
+                                    x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
+                                    title='Change version'
+                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px; transition:color 0.15s, background 0.15s;'
+                                    onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
+                                    onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+                                        <polyline points='17 1 21 5 17 9'></polyline>
+                                        <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
+                                        <polyline points='7 23 3 19 7 15'></polyline>
+                                        <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
+                                    </svg>
+                                </button>";
+                        }
+
+                        // Oval toggle switch
+                        $bg        = $isEnabled ? '#10b981' : '#4b5563';
+                        $thumbLeft = $isEnabled ? '22px' : '2px';
+                        $toggleHtml = "
+                            <div x-on:click.stop=\"\$wire.toggleModStatus('{$projectId}', '{$filename}', {$isEnabledJs})\"
+                                 title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
+                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; background:{$bg}; border-radius:9999px; transition:background 0.2s ease-in-out;'>
+                                <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#ffffff; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
+                            </div>";
+
+                        return new HtmlString("
+                            <div style='display:flex; align-items:center; gap:10px;'>
+                                {$changeVersionBtn}
+                                {$toggleHtml}
                             </div>
                         ");
                     }),
@@ -1196,28 +1254,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->visible(fn () => $this->activeTab === 'all'),
             ])
             ->recordActions([
-                // Change Version — icon button, installed tab only (browse tab uses the page action)
-                Action::make('versions')
-                    ->iconButton()
-                    ->icon('tabler-history')
-                    ->tooltip(trans('pelican-mod-manager::strings.actions.versions'))
-                    ->color('gray')
-                    ->visible(fn (array $record) => $this->activeTab === 'installed' && empty($record['unavailable']))
-                    ->modalHeading(trans('pelican-mod-manager::strings.actions.versions'))
-                    ->modalSubmitAction(false)
-                    ->schema(fn (array $record) => $this->buildVersionsSections($record['project_id'], $record)),
-                // Toggle enable/disable — icon button, installed tab only
-                Action::make('toggle_enabled')
-                    ->iconButton()
-                    ->tooltip(fn (array $record) => empty($record['is_disabled']) ? 'Disable' : 'Enable')
-                    ->icon(fn (array $record) => empty($record['is_disabled']) ? 'tabler-toggle-right' : 'tabler-toggle-left')
-                    ->color(fn (array $record) => empty($record['is_disabled']) ? 'success' : 'gray')
-                    ->visible(fn () => $this->activeTab === 'installed')
-                    ->action(fn (array $record) => $this->toggleModStatus(
-                        $record['project_id'] ?? '',
-                        $record['filename'] ?? '',
-                        empty($record['is_disabled'])
-                    )),
                 Action::make('install_latest')
                     ->icon('tabler-download')
                     ->color('success')

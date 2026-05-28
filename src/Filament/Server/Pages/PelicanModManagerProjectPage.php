@@ -263,7 +263,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
-                /* Checkbox — flex so the checkbox input centres properly */
+                /* Checkbox */
                 .fi-ta-row > td:first-child {
                     display: flex !important;
                     flex-shrink: 0 !important;
@@ -312,33 +312,90 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         } else {
             // Browse Mods tab ('all')
             // NO checkbox td in browse mode — confirmed from HTML source.
-            // td[1]=title, td[2]=downloads, td[3]=date_modified, td[last/4]=actions
+            // td[1]=title (contains icon+content+stats), td[2]=downloads (hidden),
+            // td[3]=date_modified (hidden), td[last/4]=actions (Install/Installed/Update + Versions buttons)
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
 
-                /* Title — td[1] takes all space, top-aligned */
+                /* Row — top-align so the right panel doesn't stretch to match tall content */
+                .fi-ta-row {
+                    align-items: flex-start !important;
+                }
+
+                /* Title — takes all available space, top-aligned */
                 .fi-ta-row > td:first-child {
                     flex: 1 !important;
                     min-width: 0 !important;
                     align-self: flex-start !important;
                 }
 
-                /* Downloads and date_modified — hidden (data embedded in title HtmlString) */
+                /* Downloads and date_modified columns — hidden (data lives in title HtmlString) */
                 .fi-ta-row > td:nth-child(2),
                 .fi-ta-row > td:nth-child(3) {
                     display: none !important;
                 }
 
-                /* Actions — flex column, top-aligned */
+                /* Actions column — stacked vertically, fixed width, top-aligned */
                 .fi-ta-row > td:last-child {
                     display: flex !important;
                     flex-shrink: 0 !important;
+                    width: 140px !important;
                     align-self: flex-start !important;
                     flex-direction: column !important;
-                    align-items: center !important;
+                    align-items: stretch !important;
                     gap: 8px !important;
-                    margin-left: 20px !important;
-                    padding-top: 4px !important;
+                    margin-left: 24px !important;
+                    padding-top: 2px !important;
+                }
+
+                /* Action buttons — full width, Modrinth-style */
+                .fi-ta-row > td:last-child .fi-btn {
+                    width: 100% !important;
+                    justify-content: center !important;
+                    padding: 7px 12px !important;
+                    font-size: 13px !important;
+                    font-weight: 600 !important;
+                    border-radius: 8px !important;
+                    gap: 6px !important;
+                }
+
+                /* Install (active) — solid green */
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):not(:disabled) {
+                    background-color: #1bd96a !important;
+                    border-color: #1bd96a !important;
+                    color: #ffffff !important;
+                }
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):not(:disabled):hover {
+                    background-color: #15c45f !important;
+                    border-color: #15c45f !important;
+                }
+
+                /* Installed (disabled) — green outline, transparent bg */
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
+                    background-color: transparent !important;
+                    border: 1px solid #1bd96a !important;
+                    color: #1bd96a !important;
+                    opacity: 1 !important;
+                    cursor: default !important;
+                }
+
+                /* Update — amber */
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
+                    background-color: #f59e0b !important;
+                    border-color: #f59e0b !important;
+                    color: #ffffff !important;
+                }
+
+                /* Versions — subtle gray */
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
+                    background-color: rgba(255,255,255,0.06) !important;
+                    border: 1px solid rgba(255,255,255,0.1) !important;
+                    color: #c4c4c8 !important;
+                }
+                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
+                    background-color: rgba(255,255,255,0.1) !important;
+                    border-color: rgba(255,255,255,0.18) !important;
                 }
             CSS;
         }
@@ -913,46 +970,44 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $dateTooltip = 'Updated ' . $carbonDate->timezone($timezone)->format('M j, Y, g:i A T');
                         }
 
-                        // Build the metadata footer (tags + stats)
-                        $metadataFooterHtml = "";
-                        if (!empty($tagHtml) || !empty($downloadsFormatted) || !empty($followsFormatted) || !empty($dateFormatted)) {
-                            $metadataFooterHtml .= "<div style='display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: 10px; flex-wrap: wrap; gap: 12px;'>";
-                            
-                            // Tags on the left
-                            $metadataFooterHtml .= $tagHtml ? $tagHtml : "<div></div>";
-                            
-                            // Stats on the right
-                            $metadataFooterHtml .= "
-                                <div style='display: flex; align-items: center; gap: 14px; color: #a1a1aa; font-size: 12.5px; font-weight: 500; flex-shrink: 0;'>
-                                    <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$downloadsFormattedFull}'>
-                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
-                                        <span>{$downloadsFormatted}</span>
-                                    </div>
-                                    <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$followsFormattedFull}'>
-                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
-                                        <span>{$followsFormatted}</span>
+                        // Right-side stats panel (aligned with action buttons column)
+                        $statsHtml = "";
+                        if (!empty($downloadsFormatted) || !empty($followsFormatted) || !empty($dateFormatted)) {
+                            $statsHtml = "
+                                <div style='flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; color: #a1a1aa; font-size: 12px; font-weight: 500; text-align: right; min-width: 110px;'>
+                                    <div style='display: flex; align-items: center; gap: 10px;'>
+                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$downloadsFormattedFull}'>
+                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
+                                            <span>{$downloadsFormatted}</span>
+                                        </div>
+                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$followsFormattedFull}'>
+                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
+                                            <span>{$followsFormatted}</span>
+                                        </div>
                                     </div>
                                     <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$dateTooltip}'>
-                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
+                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
                                         <span>{$dateFormatted}</span>
                                     </div>
                                 </div>
                             ";
-                            
-                            $metadataFooterHtml .= "</div>";
                         }
-                        
+
+                        // Tags row at bottom of content
+                        $tagsRow = $tagHtml ? "<div style='margin-top: 8px;'>{$tagHtml}</div>" : "";
+
                         return new HtmlString("
                             <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0; width: 100%; box-sizing: border-box;'>
                                 <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
-                                <div style='display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; flex: 1; min-width: 0;'>
+                                <div style='flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;'>
                                     <div style='display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;'>
-                                        <span style='font-size: 18px; font-weight: 700; color: #ffffff; transition: color 0.15s ease;' onmouseover=\"this.style.color='#10b981'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</span>
+                                        <span style='font-size: 16px; font-weight: 700; color: #ffffff;'>{$title}</span>
                                         {$authorHtml}
                                     </div>
                                     {$descHtml}
-                                    {$metadataFooterHtml}
+                                    {$tagsRow}
                                 </div>
+                                {$statsHtml}
                             </div>
                         ");
                     })
@@ -1050,10 +1105,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             }, true)
             ->recordActions([
                 Action::make('versions')
+                    ->button()
                     ->icon('tabler-list')
                     ->color('gray')
                     ->label(trans('pelican-mod-manager::strings.actions.versions'))
-                    ->visible(fn (array $record) => empty($record['unavailable']))
+                    ->visible(fn (array $record) => empty($record['unavailable']) && $this->activeTab === 'all')
                     ->modalSubmitAction(false)
                     ->schema(function (array $record) {
                         $versions = $this->getCachedVersions($record['project_id']);
@@ -1165,10 +1221,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return $sections;
                     }),
                 Action::make('install_latest')
+                    ->button()
                     ->icon('tabler-download')
                     ->color('success')
                     ->label(trans('pelican-mod-manager::strings.actions.install'))
                     ->visible(function (array $record) {
+                        if ($this->activeTab !== 'all') return false;
                         if (!empty($record['is_local']) || !empty($record['unavailable'])) {
                             return false;
                         }
@@ -1222,10 +1280,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('update')
+                    ->button()
                     ->icon('tabler-refresh')
                     ->color('warning')
                     ->label(trans('pelican-mod-manager::strings.actions.update'))
                     ->visible(function (array $record) {
+                        if ($this->activeTab !== 'all') return false;
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
                         if (is_null($installedMod)) {
@@ -1302,11 +1362,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('installed')
+                    ->button()
                     ->icon('tabler-check')
                     ->color('success')
                     ->label(trans('pelican-mod-manager::strings.actions.installed'))
                     ->disabled()
                     ->visible(function (array $record) {
+                        if ($this->activeTab !== 'all') return false;
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
                         if (is_null($installedMod)) {

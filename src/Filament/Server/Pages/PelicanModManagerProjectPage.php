@@ -56,7 +56,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
-    protected static ?string $slug = 'modrinth';
+    protected static ?string $slug = 'mods';
 
     protected static ?int $navigationSort = 30;
 

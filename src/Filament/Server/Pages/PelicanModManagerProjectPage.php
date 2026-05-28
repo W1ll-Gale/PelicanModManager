@@ -163,6 +163,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 overflow: visible !important;
             }
 
+            /* Filament wraps each column in <a class="fi-ta-col">; make it fill the td */
+            .fi-ta-row > td > a,
+            .fi-ta-row > td > .fi-ta-col {
+                display: block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* Inner text wrapper divs — must also be full-width blocks */
+            .fi-ta-row .fi-ta-text,
+            .fi-ta-row .fi-ta-text-item {
+                display: block !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
             /* HIDE VISUALLY UNUSED LABELS ON SMALL SCREENS OR HIDDEN TEXT */
             div:has(> .modrinth-custom-styles),
             div:has(> div > .modrinth-custom-styles),
@@ -319,17 +335,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     flex-shrink: 0 !important;
                     align-self: flex-start !important;
                     flex-direction: column !important;
-                    align-items: stretch !important;
+                    align-items: center !important;
                     gap: 8px !important;
                     margin-left: 20px !important;
                     padding-top: 4px !important;
-                }
-
-                /* Full-width buttons inside the actions column */
-                .fi-ta-row > td:last-child .fi-btn {
-                    width: 100% !important;
-                    justify-content: center !important;
-                    min-width: 120px !important;
                 }
             CSS;
         }

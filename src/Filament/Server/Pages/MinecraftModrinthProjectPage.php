@@ -566,259 +566,368 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $iconUrl = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'></path><polyline points='3.27 6.96 12 12.01 20.73 6.96'></polyline><line x1='12' y1='22.08' x2='12' y2='12'></line></svg>";
                         }
 
-                        $styleHtml = <<<HTML
-                        <style>
-                            /* Hide the column header row */
-                            .fi-ta-table thead {
-                                display: none !important;
-                            }
-                            
-                            /* Remove standard table style and container shadow */
-                            .fi-ta-content {
-                                background: transparent !important;
-                                box-shadow: none !important;
-                                border: none !important;
-                            }
-                            
-                            /* Style each table row as a sleek premium Modrinth card */
-                            .fi-ta-row {
-                                display: flex !important;
-                                flex-direction: row !important;
-                                align-items: center !important;
-                                justify-content: space-between !important;
-                                background-color: #1a1a1e !important; /* Rich sleek dark grey */
-                                border: 1px solid #2d2f34 !important; /* Thin border */
-                                border-radius: 12px !important;
-                                padding: 16px 20px !important;
-                                margin-bottom: 14px !important;
-                                transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
-                                width: 100% !important;
-                                box-sizing: border-box !important;
-                                position: relative !important; /* Crucial for absolute positioning of right panel items */
-                            }
-                            
-                            .fi-ta-row:hover {
-                                border-color: #4b4f56 !important;
-                                background-color: #202024 !important;
-                                transform: translateY(-1px);
-                                box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-                            }
-                            
-                            /* Base cell reset */
-                            .fi-ta-row > td {
-                                border: none !important;
-                                padding: 0 !important;
-                                background: transparent !important;
-                                display: flex !important;
-                                align-items: center !important;
-                                height: auto !important;
-                                min-width: 0 !important;
-                                box-sizing: border-box !important;
-                            }
-                            
-                            /* =========================================================================
-                               BROWSE/ALL TAB (No selection checkbox)
-                               - 1st cell: Title (flex: 1, padding right for absolute positioned right panel)
-                               - 2nd cell: Downloads (Hidden)
-                               - 3rd cell: Date Modified (Hidden)
-                               - 4th cell: Actions (last-child, absolute-positioned at top-right)
-                               ========================================================================= */
-                            
-                            .fi-ta-row:not(:has(input[type="checkbox"])) {
-                                min-height: 114px !important;
-                            }
-                            
-                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:first-child {
-                                flex: 1 !important;
-                                min-width: 0 !important;
-                                display: block !important;
-                            }
-                            
-                            /* Prevent description overlapping stats and buttons on the right */
-                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:first-child > div,
-                            .fi-ta-row:not(:has(input[type="checkbox"])) .fi-ta-col-wrp,
-                            .fi-ta-row:not(:has(input[type="checkbox"])) .fi-ta-text {
-                                padding-right: 170px !important;
-                                width: 100% !important;
-                                max-width: 100% !important;
-                                display: block !important;
-                                box-sizing: border-box !important;
-                            }
-                            
-                            /* Hide redundant cells on All tab */
-                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(2),
-                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(3) {
-                                display: none !important;
-                            }
-                            
-                            /* Absolute position actions cell on Browse tab */
-                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:last-child {
-                                position: absolute !important;
-                                right: 20px !important;
-                                top: 16px !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                height: auto !important;
-                                z-index: 10 !important;
-                                flex-shrink: 0 !important;
-                                display: inline-flex !important;
-                                align-items: center !important;
-                                justify-content: flex-end !important;
-                            }
-                            
-                            /* =========================================================================
-                               INSTALLED TAB (Has selection checkbox)
-                               - 1st cell: Checkbox (flex-shrink: 0)
-                               - 2nd cell: Title (flex: 1)
-                               - 3rd cell: Version (flex-shrink: 0, width: 220px)
-                               - 4th cell: Status Toggle (flex-shrink: 0, width: 80px)
-                               - 5th cell: Actions (last-child, flex-shrink: 0)
-                               ========================================================================= */
-                            
-                            /* Checkbox column */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:first-child {
-                                margin-right: 16px !important;
-                                flex-shrink: 0 !important;
-                                display: flex !important;
-                                align-items: center !important;
-                                justify-content: center !important;
-                                width: auto !important;
-                            }
-                            
-                            /* Title column */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) {
-                                flex: 1 !important;
-                                min-width: 0 !important;
-                                display: block !important;
-                            }
-                            
-                            /* Version column */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(3) {
-                                flex-shrink: 0 !important;
-                                width: 220px !important;
-                                margin-left: 24px !important;
-                                margin-right: 24px !important;
-                                display: flex !important;
-                                align-items: center !important;
-                            }
-                            
-                            /* Status toggle switch column */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(4) {
-                                flex-shrink: 0 !important;
-                                width: 80px !important;
-                                margin-right: 24px !important;
-                                display: flex !important;
-                                align-items: center !important;
-                                justify-content: center !important;
-                                color: transparent !important;
-                            }
-                            
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(4) > div {
-                                color: initial !important;
-                            }
-                            
-                            /* Default actions column alignment for Installed tab */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:last-child {
-                                flex-shrink: 0 !important;
-                                display: inline-flex !important;
-                                align-items: center !important;
-                                gap: 12px !important;
-                                justify-content: flex-end !important;
-                            }
-                            
-                            /* =========================================================================
-                               COMMON ELEMENTS & CONTENT WRAPPER RESETS
-                               ========================================================================= */
-                            
-                            /* Ensure the inner Filament wrappers expand to fill the cell width on Installed tab */
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) > div,
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) .fi-ta-col-wrp,
-                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) .fi-ta-text {
-                                width: 100% !important;
-                                max-width: 100% !important;
-                                display: block !important;
-                            }
-                            
-                            /* Prevent inner Filament padding/margins from breaking the layout */
-                            .fi-ta-col-wrp {
-                                padding: 0 !important;
-                                margin: 0 !important;
-                            }
-                            
-                            /* Format svg icons inside columns */
-                            .fi-ta-row > td svg {
-                                color: #a1a1aa !important;
-                            }
-                            
-                            /* Style buttons inside cards to look premium and consistent */
-                            .fi-ta-row > td:last-child .fi-btn {
-                                border-radius: 8px !important;
-                                padding: 8px 16px !important;
-                                font-size: 13px !important;
-                                font-weight: 600 !important;
-                                text-transform: none !important;
-                                letter-spacing: normal !important;
-                                box-shadow: none !important;
-                                transition: all 0.2s ease !important;
-                                border: 1px solid transparent !important;
-                            }
-                            
-                            /* Green pill buttons for Installed (disabled) */
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
-                                background-color: rgba(16, 185, 129, 0.1) !important;
-                                border: 1px solid rgba(16, 185, 129, 0.2) !important;
-                                color: #10b981 !important;
-                                opacity: 0.9 !important;
-                                cursor: default !important;
-                            }
-                            
-                            /* Green buttons for Install Latest / Install */
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
-                                background-color: #10b981 !important;
-                                color: #ffffff !important;
-                                box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
-                            }
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
-                                background-color: #0d9488 !important;
-                                box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
-                            }
-                            
-                            /* Warning buttons for Update */
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
-                                background-color: #f59e0b !important;
-                                color: #ffffff !important;
-                            }
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
-                                background-color: #d97706 !important;
-                            }
-                            
-                            /* Info/Gray buttons for Versions selection */
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
-                                background-color: rgba(255, 255, 255, 0.05) !important;
-                                border: 1px solid rgba(255, 255, 255, 0.08) !important;
-                                color: #e4e4e7 !important;
-                            }
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
-                                background-color: rgba(255, 255, 255, 0.1) !important;
-                                border-color: rgba(255, 255, 255, 0.16) !important;
-                            }
-                            
-                            /* Danger buttons for Uninstall */
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
-                                background-color: rgba(239, 68, 68, 0.1) !important;
-                                border: 1px solid rgba(239, 68, 68, 0.2) !important;
-                                color: #ef4444 !important;
-                            }
-                            .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
-                                background-color: rgba(239, 68, 68, 0.2) !important;
-                                border-color: rgba(239, 68, 68, 0.3) !important;
-                            }
-                        </style>
-                        HTML;
+                        if ($this->activeTab === 'installed') {
+                            $styleHtml = <<<HTML
+                            <style>
+                                /* Hide the column header row */
+                                .fi-ta-table thead {
+                                    display: none !important;
+                                }
+                                
+                                /* Remove standard table style and container shadow */
+                                .fi-ta-content {
+                                    background: transparent !important;
+                                    box-shadow: none !important;
+                                    border: none !important;
+                                }
+                                
+                                /* Style each table row as a sleek premium Modrinth card */
+                                .fi-ta-row {
+                                    display: flex !important;
+                                    flex-direction: row !important;
+                                    align-items: center !important;
+                                    justify-content: space-between !important;
+                                    background-color: #1a1a1e !important; /* Rich sleek dark grey */
+                                    border: 1px solid #2d2f34 !important; /* Thin border */
+                                    border-radius: 12px !important;
+                                    padding: 16px 20px !important;
+                                    margin-bottom: 14px !important;
+                                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+                                    width: 100% !important;
+                                    box-sizing: border-box !important;
+                                }
+                                
+                                .fi-ta-row:hover {
+                                    border-color: #4b4f56 !important;
+                                    background-color: #202024 !important;
+                                    transform: translateY(-1px);
+                                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+                                }
+                                
+                                /* Base cell reset */
+                                .fi-ta-row > td {
+                                    border: none !important;
+                                    padding: 0 !important;
+                                    background: transparent !important;
+                                    display: flex !important;
+                                    align-items: center !important;
+                                    height: auto !important;
+                                    min-width: 0 !important;
+                                    box-sizing: border-box !important;
+                                }
+                                
+                                /* Checkbox column */
+                                .fi-ta-row > td:first-child {
+                                    margin-right: 16px !important;
+                                    flex-shrink: 0 !important;
+                                    display: flex !important;
+                                    align-items: center !important;
+                                    justify-content: center !important;
+                                    width: auto !important;
+                                }
+                                
+                                /* Title column */
+                                .fi-ta-row > td:nth-child(2) {
+                                    flex: 1 !important;
+                                    min-width: 0 !important;
+                                    display: block !important;
+                                }
+                                
+                                /* Ensure the inner Filament wrappers expand to fill the cell width on Installed tab */
+                                .fi-ta-row > td:nth-child(2) > div,
+                                .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
+                                .fi-ta-row > td:nth-child(2) .fi-ta-text {
+                                    width: 100% !important;
+                                    max-width: 100% !important;
+                                    display: block !important;
+                                }
+                                
+                                /* Version column */
+                                .fi-ta-row > td:nth-child(3) {
+                                    flex-shrink: 0 !important;
+                                    width: 220px !important;
+                                    margin-left: 24px !important;
+                                    margin-right: 24px !important;
+                                    display: flex !important;
+                                    align-items: center !important;
+                                }
+                                
+                                /* Status toggle switch column */
+                                .fi-ta-row > td:nth-child(4) {
+                                    flex-shrink: 0 !important;
+                                    width: 80px !important;
+                                    margin-right: 24px !important;
+                                    display: flex !important;
+                                    align-items: center !important;
+                                    justify-content: center !important;
+                                    color: transparent !important;
+                                }
+                                
+                                .fi-ta-row > td:nth-child(4) > div {
+                                    color: initial !important;
+                                }
+                                
+                                /* Default actions column alignment for Installed tab */
+                                .fi-ta-row > td:last-child {
+                                    flex-shrink: 0 !important;
+                                    display: inline-flex !important;
+                                    align-items: center !important;
+                                    gap: 12px !important;
+                                    justify-content: flex-end !important;
+                                }
+                                
+                                /* Prevent inner Filament padding/margins from breaking the layout */
+                                .fi-ta-col-wrp {
+                                    padding: 0 !important;
+                                    margin: 0 !important;
+                                }
+                                
+                                /* Format svg icons inside columns */
+                                .fi-ta-row > td svg {
+                                    color: #a1a1aa !important;
+                                }
+                                
+                                /* Style buttons inside cards to look premium and consistent */
+                                .fi-ta-row > td:last-child .fi-btn {
+                                    border-radius: 8px !important;
+                                    padding: 8px 16px !important;
+                                    font-size: 13px !important;
+                                    font-weight: 600 !important;
+                                    text-transform: none !important;
+                                    letter-spacing: normal !important;
+                                    box-shadow: none !important;
+                                    transition: all 0.2s ease !important;
+                                    border: 1px solid transparent !important;
+                                }
+                                
+                                /* Green pill buttons for Installed (disabled) */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
+                                    background-color: rgba(16, 185, 129, 0.1) !important;
+                                    border: 1px solid rgba(16, 185, 129, 0.2) !important;
+                                    color: #10b981 !important;
+                                    opacity: 0.9 !important;
+                                    cursor: default !important;
+                                }
+                                
+                                /* Green buttons for Install Latest / Install */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
+                                    background-color: #10b981 !important;
+                                    color: #ffffff !important;
+                                    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
+                                    background-color: #0d9488 !important;
+                                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
+                                }
+                                
+                                /* Warning buttons for Update */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
+                                    background-color: #f59e0b !important;
+                                    color: #ffffff !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
+                                    background-color: #d97706 !important;
+                                }
+                                
+                                /* Info/Gray buttons for Versions selection */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
+                                    background-color: rgba(255, 255, 255, 0.05) !important;
+                                    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                                    color: #e4e4e7 !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
+                                    background-color: rgba(255, 255, 255, 0.1) !important;
+                                    border-color: rgba(255, 255, 255, 0.16) !important;
+                                }
+                                
+                                /* Danger buttons for Uninstall */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
+                                    background-color: rgba(239, 68, 68, 0.1) !important;
+                                    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+                                    color: #ef4444 !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
+                                    background-color: rgba(239, 68, 68, 0.2) !important;
+                                    border-color: rgba(239, 68, 68, 0.3) !important;
+                                }
+                            </style>
+                            HTML;
+                        } else {
+                            $styleHtml = <<<HTML
+                            <style>
+                                /* Hide the column header row */
+                                .fi-ta-table thead {
+                                    display: none !important;
+                                }
+                                
+                                /* Remove standard table style and container shadow */
+                                .fi-ta-content {
+                                    background: transparent !important;
+                                    box-shadow: none !important;
+                                    border: none !important;
+                                }
+                                
+                                /* Style each table row as a sleek premium Modrinth card */
+                                .fi-ta-row {
+                                    display: flex !important;
+                                    flex-direction: row !important;
+                                    align-items: center !important;
+                                    justify-content: space-between !important;
+                                    background-color: #1a1a1e !important; /* Rich sleek dark grey */
+                                    border: 1px solid #2d2f34 !important; /* Thin border */
+                                    border-radius: 12px !important;
+                                    padding: 16px 20px !important;
+                                    margin-bottom: 14px !important;
+                                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+                                    width: 100% !important;
+                                    box-sizing: border-box !important;
+                                    position: relative !important; /* Crucial for absolute positioning of right panel items */
+                                    min-height: 114px !important;
+                                }
+                                
+                                .fi-ta-row:hover {
+                                    border-color: #4b4f56 !important;
+                                    background-color: #202024 !important;
+                                    transform: translateY(-1px);
+                                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+                                }
+                                
+                                /* Base cell reset */
+                                .fi-ta-row > td {
+                                    border: none !important;
+                                    padding: 0 !important;
+                                    background: transparent !important;
+                                    display: flex !important;
+                                    align-items: center !important;
+                                    height: auto !important;
+                                    min-width: 0 !important;
+                                    box-sizing: border-box !important;
+                                }
+                                
+                                /* Title cell (flex: 1) */
+                                .fi-ta-row > td:first-child {
+                                    flex: 1 !important;
+                                    min-width: 0 !important;
+                                    display: block !important;
+                                }
+                                
+                                /* Prevent description overlapping stats and buttons on the right */
+                                .fi-ta-row > td:first-child > div,
+                                .fi-ta-row .fi-ta-col-wrp,
+                                .fi-ta-row .fi-ta-text {
+                                    padding-right: 170px !important;
+                                    width: 100% !important;
+                                    max-width: 100% !important;
+                                    display: block !important;
+                                    box-sizing: border-box !important;
+                                }
+                                
+                                /* Hide downloads and date modified columns cell */
+                                .fi-ta-row > td:nth-child(2),
+                                .fi-ta-row > td:nth-child(3) {
+                                    display: none !important;
+                                }
+                                
+                                /* Absolute position actions cell on Browse tab */
+                                .fi-ta-row > td:last-child {
+                                    position: absolute !important;
+                                    right: 20px !important;
+                                    top: 16px !important;
+                                    margin: 0 !important;
+                                    padding: 0 !important;
+                                    height: auto !important;
+                                    z-index: 10 !important;
+                                    flex-shrink: 0 !important;
+                                    display: inline-flex !important;
+                                    align-items: center !important;
+                                    justify-content: flex-end !important;
+                                }
+                                
+                                /* Prevent inner Filament padding/margins from breaking the layout */
+                                .fi-ta-col-wrp {
+                                    padding: 0 !important;
+                                    margin: 0 !important;
+                                }
+                                
+                                /* Format svg icons inside columns */
+                                .fi-ta-row > td svg {
+                                    color: #a1a1aa !important;
+                                }
+                                
+                                /* Style buttons inside cards to look premium and consistent */
+                                .fi-ta-row > td:last-child .fi-btn {
+                                    border-radius: 8px !important;
+                                    padding: 8px 16px !important;
+                                    font-size: 13px !important;
+                                    font-weight: 600 !important;
+                                    text-transform: none !important;
+                                    letter-spacing: normal !important;
+                                    box-shadow: none !important;
+                                    transition: all 0.2s ease !important;
+                                    border: 1px solid transparent !important;
+                                }
+                                
+                                /* Green pill buttons for Installed (disabled) */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
+                                    background-color: rgba(16, 185, 129, 0.1) !important;
+                                    border: 1px solid rgba(16, 185, 129, 0.2) !important;
+                                    color: #10b981 !important;
+                                    opacity: 0.9 !important;
+                                    cursor: default !important;
+                                }
+                                
+                                /* Green buttons for Install Latest / Install */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]) {
+                                    background-color: #10b981 !important;
+                                    color: #ffffff !important;
+                                    box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):hover {
+                                    background-color: #0d9488 !important;
+                                    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
+                                }
+                                
+                                /* Warning buttons for Update */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
+                                    background-color: #f59e0b !important;
+                                    color: #ffffff !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning:hover {
+                                    background-color: #d97706 !important;
+                                }
+                                
+                                /* Info/Gray buttons for Versions selection */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info,
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
+                                    background-color: rgba(255, 255, 255, 0.05) !important;
+                                    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                                    color: #e4e4e7 !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-info:hover,
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
+                                    background-color: rgba(255, 255, 255, 0.1) !important;
+                                    border-color: rgba(255, 255, 255, 0.16) !important;
+                                }
+                                
+                                /* Danger buttons for Uninstall */
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger {
+                                    background-color: rgba(239, 68, 68, 0.1) !important;
+                                    border: 1px solid rgba(239, 68, 68, 0.2) !important;
+                                    color: #ef4444 !important;
+                                }
+                                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-danger:hover {
+                                    background-color: rgba(239, 68, 68, 0.2) !important;
+                                    border-color: rgba(239, 68, 68, 0.3) !important;
+                                }
+                            </style>
+                            HTML;
+                        }
                         
                         if ($this->activeTab === 'installed') {
                             $authorUrl = "https://modrinth.com/user/" . urlencode($author);

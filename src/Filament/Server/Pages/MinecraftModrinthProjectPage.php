@@ -98,26 +98,23 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         $this->loadDefaultActiveTab();
     }
 
-    public function getExtraHeaders(): array
+    protected function getDynamicStyles(): string
     {
-        $css = <<<CSS
+        $sharedCss = <<<CSS
             /* HIDE COLUMN HEADERS */
-            .modrinth-installed-table thead,
-            .modrinth-browse-table thead {
+            .fi-ta-content thead {
                 display: none !important;
             }
 
             /* REMOVE DEFAULT CONTAINER SHADOWS */
-            .modrinth-installed-table .fi-ta-content,
-            .modrinth-browse-table .fi-ta-content {
+            .fi-ta-content {
                 background: transparent !important;
                 box-shadow: none !important;
                 border: none !important;
             }
 
             /* EACH ROW AS A CARD */
-            .modrinth-installed-table .fi-ta-row,
-            .modrinth-browse-table .fi-ta-row {
+            .fi-ta-row {
                 display: flex !important;
                 flex-direction: row !important;
                 align-items: center !important;
@@ -133,8 +130,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 box-sizing: border-box !important;
             }
 
-            .modrinth-installed-table .fi-ta-row:hover,
-            .modrinth-browse-table .fi-ta-row:hover {
+            .fi-ta-row:hover {
                 border-color: #4b4f56 !important;
                 background-color: #202024 !important;
                 transform: translateY(-1px);
@@ -142,8 +138,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             }
 
             /* CELL RESET */
-            .modrinth-installed-table .fi-ta-row > td,
-            .modrinth-browse-table .fi-ta-row > td {
+            .fi-ta-row > td {
                 border: none !important;
                 padding: 0 !important;
                 background: transparent !important;
@@ -154,110 +149,24 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 box-sizing: border-box !important;
             }
 
-            /* --- INSTALLED TAB CELLS --- */
-            .modrinth-installed-table .fi-ta-row > td:first-child {
-                margin-right: 16px !important;
-                flex-shrink: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                width: auto !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:nth-child(2) {
-                flex: 1 !important;
-                min-width: 0 !important;
-                display: block !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:nth-child(2) > div,
-            .modrinth-installed-table .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
-            .modrinth-installed-table .fi-ta-row > td:nth-child(2) .fi-ta-text {
-                width: 100% !important;
-                max-width: 100% !important;
-                display: block !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:nth-child(3) {
-                flex-shrink: 0 !important;
-                width: 220px !important;
-                margin-left: 24px !important;
-                margin-right: 24px !important;
-                display: flex !important;
-                align-items: center !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:nth-child(4) {
-                flex-shrink: 0 !important;
-                width: 80px !important;
-                margin-right: 24px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                color: transparent !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:nth-child(4) > div {
-                color: initial !important;
-            }
-
-            .modrinth-installed-table .fi-ta-row > td:last-child {
-                flex-shrink: 0 !important;
-                display: inline-flex !important;
-                align-items: center !important;
-                gap: 12px !important;
-                justify-content: flex-end !important;
-            }
-
-            /* --- BROWSE TAB CELLS --- */
-            .modrinth-browse-table .fi-ta-row {
-                position: relative !important;
-                min-height: 114px !important;
-            }
-
-            .modrinth-browse-table .fi-ta-row > td:first-child {
-                flex: 1 !important;
-                min-width: 0 !important;
-                display: block !important;
-            }
-
-            .modrinth-browse-table .fi-ta-row > td:first-child > div,
-            .modrinth-browse-table .fi-ta-row .fi-ta-col-wrp,
-            .modrinth-browse-table .fi-ta-row .fi-ta-text {
-                padding-right: 170px !important;
-                width: 100% !important;
-                max-width: 100% !important;
-                display: block !important;
-                box-sizing: border-box !important;
-            }
-
-            .modrinth-browse-table .fi-ta-row > td:nth-child(2),
-            .modrinth-browse-table .fi-ta-row > td:nth-child(3) {
+            /* HIDE VISUALLY UNUSED LABELS ON SMALL SCREENS OR HIDDEN TEXT */
+            div:has(> .modrinth-custom-styles),
+            div:has(> div > .modrinth-custom-styles),
+            .fi-in-text:has(.modrinth-custom-styles),
+            .fi-in-entry-wrp:has(.modrinth-custom-styles) {
                 display: none !important;
-            }
-
-            .modrinth-browse-table .fi-ta-row > td:last-child {
-                position: absolute !important;
-                right: 20px !important;
-                top: 16px !important;
-                margin: 0 !important;
+                border: none !important;
+                background: transparent !important;
                 padding: 0 !important;
-                height: auto !important;
-                z-index: 10 !important;
-                flex-shrink: 0 !important;
-                display: inline-flex !important;
-                align-items: center !important;
-                justify-content: flex-end !important;
+                box-shadow: none !important;
             }
 
             /* --- SHARED STYLINGS --- */
-            .modrinth-installed-table .fi-ta-row svg,
-            .modrinth-browse-table .fi-ta-row svg {
+            .fi-ta-row svg {
                 color: #a1a1aa !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn,
-            .modrinth-browse-table .fi-ta-row .fi-btn {
+            .fi-ta-row .fi-btn {
                 border-radius: 8px !important;
                 padding: 8px 16px !important;
                 font-size: 13px !important;
@@ -269,10 +178,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 border: 1px solid transparent !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success[disabled],
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:disabled,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success[disabled],
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:disabled {
+            .fi-ta-row .fi-btn.fi-btn-color-success[disabled],
+            .fi-ta-row .fi-btn.fi-btn-color-success:disabled {
                 background-color: rgba(16, 185, 129, 0.1) !important;
                 border: 1px solid rgba(16, 185, 129, 0.2) !important;
                 color: #10b981 !important;
@@ -280,60 +187,152 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 cursor: default !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]),
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]) {
+            .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]) {
                 background-color: #10b981 !important;
                 color: #ffffff !important;
                 box-shadow: 0 0 12px rgba(16, 185, 129, 0.2) !important;
             }
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]):hover,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]):hover {
+            .fi-ta-row .fi-btn.fi-btn-color-success:not([disabled]):hover {
                 background-color: #0d9488 !important;
                 box-shadow: 0 0 16px rgba(16, 185, 129, 0.4) !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-warning,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-warning {
+            .fi-ta-row .fi-btn.fi-btn-color-warning {
                 background-color: #f59e0b !important;
                 color: #ffffff !important;
             }
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-warning:hover,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-warning:hover {
+            .fi-ta-row .fi-btn.fi-btn-color-warning:hover {
                 background-color: #d97706 !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-info,
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-gray,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-info,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-gray {
+            .fi-ta-row .fi-btn.fi-btn-color-info,
+            .fi-ta-row .fi-btn.fi-btn-color-gray {
                 background-color: rgba(255, 255, 255, 0.05) !important;
                 border: 1px solid rgba(255, 255, 255, 0.08) !important;
                 color: #e4e4e7 !important;
             }
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-info:hover,
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-gray:hover,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-info:hover,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-gray:hover {
+            .fi-ta-row .fi-btn.fi-btn-color-info:hover,
+            .fi-ta-row .fi-btn.fi-btn-color-gray:hover {
                 background-color: rgba(255, 255, 255, 0.1) !important;
                 border-color: rgba(255, 255, 255, 0.16) !important;
             }
 
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-danger,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-danger {
+            .fi-ta-row .fi-btn.fi-btn-color-danger {
                 background-color: rgba(239, 68, 68, 0.1) !important;
                 border: 1px solid rgba(239, 68, 68, 0.2) !important;
                 color: #ef4444 !important;
             }
-            .modrinth-installed-table .fi-ta-row .fi-btn.fi-btn-color-danger:hover,
-            .modrinth-browse-table .fi-ta-row .fi-btn.fi-btn-color-danger:hover {
+            .fi-ta-row .fi-btn.fi-btn-color-danger:hover {
                 background-color: rgba(239, 68, 68, 0.2) !important;
                 border-color: rgba(239, 68, 68, 0.3) !important;
             }
         CSS;
 
-        return [
-            'custom-modrinth-css' => new \Illuminate\Support\HtmlString("<style>{$css}</style>"),
-        ];
+        if ($this->activeTab === 'installed') {
+            $tabCss = <<<CSS
+                /* --- INSTALLED TAB CELLS --- */
+                .fi-ta-row > td:first-child {
+                    margin-right: 16px !important;
+                    flex-shrink: 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    width: auto !important;
+                }
+
+                .fi-ta-row > td:nth-child(2) {
+                    flex: 1 !important;
+                    min-width: 0 !important;
+                    display: block !important;
+                }
+
+                .fi-ta-row > td:nth-child(2) > div,
+                .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
+                .fi-ta-row > td:nth-child(2) .fi-ta-text {
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    display: block !important;
+                }
+
+                .fi-ta-row > td:nth-child(3) {
+                    flex-shrink: 0 !important;
+                    width: 220px !important;
+                    margin-left: 24px !important;
+                    margin-right: 24px !important;
+                    display: flex !important;
+                    align-items: center !important;
+                }
+
+                .fi-ta-row > td:nth-child(4) {
+                    flex-shrink: 0 !important;
+                    width: 80px !important;
+                    margin-right: 24px !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    color: transparent !important;
+                }
+
+                .fi-ta-row > td:nth-child(4) > div {
+                    color: initial !important;
+                }
+
+                .fi-ta-row > td:last-child {
+                    flex-shrink: 0 !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    gap: 12px !important;
+                    justify-content: flex-end !important;
+                }
+            CSS;
+        } else {
+            // Browse Mods tab ('all')
+            $tabCss = <<<CSS
+                /* --- BROWSE TAB CELLS --- */
+                .fi-ta-row {
+                    position: relative !important;
+                    min-height: 114px !important;
+                }
+
+                .fi-ta-row > td:first-child {
+                    flex: 1 !important;
+                    min-width: 0 !important;
+                    display: block !important;
+                }
+
+                .fi-ta-row > td:first-child > div,
+                .fi-ta-row > td:first-child .fi-ta-col-wrp {
+                    padding-right: 170px !important;
+                    width: 100% !important;
+                    max-width: 100% !important;
+                    display: block !important;
+                    box-sizing: border-box !important;
+                }
+
+                .fi-ta-row > td:nth-child(2),
+                .fi-ta-row > td:nth-child(3),
+                .fi-ta-row > td:nth-child(4),
+                .fi-ta-row > td:nth-child(5) {
+                    display: none !important;
+                }
+
+                .fi-ta-row > td:last-child {
+                    position: absolute !important;
+                    right: 20px !important;
+                    top: 16px !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    height: auto !important;
+                    z-index: 10 !important;
+                    flex-shrink: 0 !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: flex-end !important;
+                }
+            CSS;
+        }
+
+        return $sharedCss . $tabCss;
     }
 
     /** @return array<string, Tab> */
@@ -711,9 +710,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->extraAttributes(fn () => [
-                'class' => $this->activeTab === 'installed' ? 'modrinth-installed-table' : 'modrinth-browse-table',
-            ])
             ->records(function (?string $search, int $page) {
                 /** @var Server $server */
                 $server = Filament::getTenant();
@@ -1406,21 +1402,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             ->filters([
                 \Filament\Tables\Filters\SelectFilter::make('status')
                     ->label('Filter Status')
-                    ->options(function () {
-                        $stats = $this->getInstalledModsStats();
-                        $options = ['all' => 'All'];
-                        
-                        if ($stats['has_disabled']) {
-                            $options['enabled'] = 'Enabled';
-                            $options['disabled'] = 'Disabled';
-                        }
-                        
-                        if ($stats['has_updates']) {
-                            $options['updates'] = 'Updates';
-                        }
-                        
-                        return $options;
-                    })
+                    ->options([
+                        'all' => 'All',
+                        'enabled' => 'Enabled',
+                        'disabled' => 'Disabled',
+                        'updates' => 'Updates',
+                    ])
                     ->default('all')
                     ->visible(fn () => $this->activeTab === 'installed'),
             ])
@@ -2097,39 +2084,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         }
     }
 
-    protected function getInstalledModsStats(): array
-    {
-        /** @var Server $server */
-        $server = Filament::getTenant();
 
-        $type = ModrinthProjectType::fromServer($server);
-        if (!$type) {
-            return ['has_disabled' => false, 'has_updates' => false];
-        }
-
-        $resolvedList = $this->getInstalledModsResolvedList($server, $type);
-
-        $hasDisabled = false;
-        $hasUpdates = false;
-
-        foreach ($resolvedList as $item) {
-            if (!empty($item['is_disabled'])) {
-                $hasDisabled = true;
-            }
-            if (empty($item['is_local']) && empty($item['unavailable'])) {
-                $versions = $this->getCachedVersions($item['project_id']);
-                $installedVersionId = $item['metadata']['version_id'] ?? null;
-                if (!empty($versions) && $installedVersionId !== $versions[0]['id']) {
-                    $hasUpdates = true;
-                }
-            }
-        }
-
-        return [
-            'has_disabled' => $hasDisabled,
-            'has_updates' => $hasUpdates,
-        ];
-    }
 
     public function content(Schema $schema): Schema
     {
@@ -2140,6 +2095,9 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
         return $schema
             ->components([
+                TextEntry::make('custom_styles')
+                    ->hiddenLabel()
+                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style></div>")),
                 TextEntry::make('import_progress')
                     ->hidden(fn () => !$this->isImporting)
                     ->hiddenLabel()

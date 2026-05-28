@@ -162,11 +162,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 box-sizing: border-box !important;
             }
 
-            /* EXPAND WRAPPERS ONLY INSIDE THE TITLE CELL (always td:nth-child(2)) */
-            .fi-ta-row > td:nth-child(2) > div,
-            .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
-            .fi-ta-row > td:nth-child(2) .fi-ta-text,
-            .fi-ta-row > td:nth-child(2) .fi-ta-text > div {
+            /* EXPAND ALL CELL WRAPPERS — needed because td is display:flex,
+               so every intermediate wrapper must also fill its parent or content collapses */
+            .fi-ta-row > td > div,
+            .fi-ta-row > td .fi-ta-col-wrp,
+            .fi-ta-row > td .fi-ta-text,
+            .fi-ta-row > td .fi-ta-text > div {
                 display: flex !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -308,23 +309,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             CSS;
         } else {
             // Browse Mods tab ('all')
+            // No checkbox column exists here — bulk actions are hidden for browse mode,
+            // so Filament omits the checkbox td entirely. Title is td:first-child.
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
 
-                /* Collapse checkbox — no bulk-install exists in browse mode */
+                /* Title column — td:first-child (no checkbox in browse mode) */
                 .fi-ta-row > td:first-child {
-                    width: 0 !important;
-                    max-width: 0 !important;
-                    overflow: hidden !important;
-                    opacity: 0 !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    flex-shrink: 0 !important;
-                    min-width: 0 !important;
-                }
-
-                /* Title column — expands to fill available space, top-aligned */
-                .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
                     display: flex !important;
@@ -333,12 +324,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 /* Hide the separate downloads and date_modified columns
                    (their data is already embedded in the title column HTML) */
-                .fi-ta-row > td:nth-child(3),
-                .fi-ta-row > td:nth-child(4) {
+                .fi-ta-row > td:nth-child(2),
+                .fi-ta-row > td:nth-child(3) {
                     display: none !important;
                 }
 
-                /* Actions — static flow layout, top-aligned, stacked vertically */
+                /* Actions — flow layout, top-aligned, stacked vertically */
                 .fi-ta-row > td:last-child {
                     flex-shrink: 0 !important;
                     align-self: flex-start !important;

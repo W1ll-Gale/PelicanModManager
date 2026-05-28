@@ -54,6 +54,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public ?array $importFilesToDownload = null;
     public ?array $importDownloadedMods = [];
 
+    public string $installedStatusFilter = 'all';
+    public bool $installedHasDisabled = false;
+    public bool $installedHasUpdates = false;
+
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
     protected static ?string $slug = 'mods';
@@ -307,6 +311,66 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 .pmm-row-disabled {
                     filter: grayscale(1) !important;
                     opacity: 0.45 !important;
+                }
+
+                /* --- COLUMN HEADERS (thead) --- */
+                /* Override the global thead:none from shared CSS */
+                .fi-ta-content thead,
+                table thead,
+                .fi-ta-table thead,
+                thead {
+                    display: block !important;
+                }
+                thead tr {
+                    display: flex !important;
+                    align-items: center !important;
+                    padding: 0 20px 10px 20px !important;
+                    margin-bottom: 4px !important;
+                    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+                }
+                thead th {
+                    display: block !important;
+                    font-size: 11px !important;
+                    font-weight: 600 !important;
+                    color: #71717a !important;
+                    letter-spacing: 0.06em !important;
+                    text-transform: uppercase !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    background: transparent !important;
+                    white-space: nowrap !important;
+                }
+                /* Match card column widths exactly */
+                thead th:first-child {
+                    flex-shrink: 0 !important;
+                    width: auto !important;
+                    margin-right: 12px !important;
+                }
+                thead th:nth-child(2) { flex: 1 1 0 !important; }
+                thead th:nth-child(3) { flex: 0 0 210px !important; width: 210px !important; text-align: center !important; }
+                thead th:nth-child(4) { flex: 1 1 0 !important; text-align: right !important; }
+                thead th:last-child   { display: none !important; }
+                /* Filament renders sort headers as buttons — keep their text styled */
+                thead th button, thead th span {
+                    font-size: 11px !important;
+                    font-weight: 600 !important;
+                    color: #71717a !important;
+                    letter-spacing: 0.06em !important;
+                    text-transform: uppercase !important;
+                    background: none !important;
+                    border: none !important;
+                    padding: 0 !important;
+                    cursor: default !important;
+                }
+
+                /* --- FILTER BAR wrapper stripping --- */
+                div:has(> .pmm-filter-bar),
+                .fi-in-text:has(.pmm-filter-bar),
+                .fi-in-entry-wrp:has(.pmm-filter-bar) {
+                    border: none !important;
+                    background: transparent !important;
+                    padding: 0 !important;
+                    box-shadow: none !important;
                 }
             CSS;
         } else {
@@ -878,6 +942,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                     $combinedItems = $this->getInstalledModsResolvedList($server, $type);
 
+                    // Compute filter chip availability on the full unfiltered list
+                    $this->installedHasDisabled = collect($combinedItems)->contains(fn ($i) => !empty($i['is_disabled']));
+                    $this->installedHasUpdates = collect($combinedItems)
+                        ->filter(fn ($i) => empty($i['is_local']))
+                        ->contains(function ($i) {
+                            $versions = $this->getCachedVersions($i['project_id']);
+                            if (empty($versions)) return false;
+                            $meta = $i['metadata'] ?? null;
+                            return $meta && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '');
+                        });
+
                     // 1. Apply search query if present
                     if ($search) {
                         $searchLower = strtolower($search);
@@ -888,8 +963,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }));
                     }
 
-                    // Apply status filter if present
-                    $statusFilter = $this->tableFilters['status']['value'] ?? 'all';
+                    // Apply status filter
+                    $statusFilter = $this->installedStatusFilter;
                     if ($statusFilter && $statusFilter !== 'all') {
                         $combinedItems = array_values(array_filter($combinedItems, function (array $item) use ($statusFilter) {
                             $isEnabled = empty($item['is_disabled']);
@@ -1247,13 +1322,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return new HtmlString("
                             <div style='display:flex; flex-direction:column; gap:4px; align-items:flex-start; text-align:left;'>
                                 {$versionHtml}
-                                <span style='font-size:11px; color:#6b7280; font-family:monospace; word-break:break-all; max-width:250px;'>{$filename}</span>
+                                <span style='font-size:11px; color:#6b7280; font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; display:block;'>{$filename}</span>
                             </div>
                         ");
                     }),
                 // Change-version button + enable/disable toggle — installed tab only
                 TextColumn::make('is_disabled')
-                    ->label('')
+                    ->label('Actions')
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->formatStateUsing(function ($state, $record) {
                         $projectId   = e($record['project_id'] ?? '');
@@ -1271,25 +1346,50 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $modType = ModrinthProjectType::fromServer($server);
                         $showFileUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
 
-                        // Change-version button (hidden for local mods)
+                        // Check if this mod has an update available
+                        $hasModUpdate = false;
+                        if (!$isLocal && $projectId && !str_starts_with($projectId, 'local_')) {
+                            $latestVersions = $this->getCachedVersions($record['project_id'] ?? '');
+                            if (!empty($latestVersions)) {
+                                $meta = $record['metadata'] ?? null;
+                                $hasModUpdate = $meta && ($meta['version_id'] ?? '') !== ($latestVersions[0]['id'] ?? '');
+                            }
+                        }
+
+                        // Change-version button OR green update button (both open the version modal)
                         $changeVersionBtn = '';
                         if (!$isLocal && $projectId) {
-                            $changeVersionBtn = "
-                                <button type='button'
-                                    data-pmm-project-id=\"{$projectId}\"
-                                    data-pmm-title=\"{$title}\"
-                                    x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
-                                    title='Change version'
-                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
-                                    onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
-                                    onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
-                                        <polyline points='17 1 21 5 17 9'></polyline>
-                                        <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
-                                        <polyline points='7 23 3 19 7 15'></polyline>
-                                        <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
-                                    </svg>
-                                </button>";
+                            if ($hasModUpdate) {
+                                $changeVersionBtn = "
+                                    <button type='button'
+                                        data-pmm-project-id=\"{$projectId}\"
+                                        data-pmm-title=\"{$title}\"
+                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
+                                        title='Update available — click to change version'
+                                        style='background:none; border:1px solid #1bd96a; cursor:pointer; padding:4px 8px; display:flex; align-items:center; gap:5px; color:#1bd96a; border-radius:6px; font-size:12px; font-weight:600;'
+                                        onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
+                                        onmouseout=\"this.style.background='none'\">
+                                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'/><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'/></svg>
+                                        Update
+                                    </button>";
+                            } else {
+                                $changeVersionBtn = "
+                                    <button type='button'
+                                        data-pmm-project-id=\"{$projectId}\"
+                                        data-pmm-title=\"{$title}\"
+                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
+                                        title='Change version'
+                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
+                                        onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
+                                        onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
+                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+                                            <polyline points='17 1 21 5 17 9'></polyline>
+                                            <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
+                                            <polyline points='7 23 3 19 7 15'></polyline>
+                                            <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
+                                        </svg>
+                                    </button>";
+                            }
                         }
 
                         // Oval toggle switch
@@ -1688,17 +1788,110 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }),
             ])
-            ->filters([
-                \Filament\Tables\Filters\SelectFilter::make('status')
-                    ->label('Filter Status')
-                    ->options([
-                        'all' => 'All',
-                        'enabled' => 'Enabled',
-                        'disabled' => 'Disabled',
-                        'updates' => 'Updates',
+            ->filters([])
+            ->headerActions([
+                Action::make('open_folder_header')
+                    ->label('Open folder')
+                    ->icon('tabler-folder-open')
+                    ->color('gray')
+                    ->outlined()
+                    ->url(function () {
+                        /** @var Server $server */
+                        $server = Filament::getTenant();
+                        $type = ModrinthProjectType::fromServer($server);
+                        return $type ? ListFiles::getUrl(['path' => $type->getFolder()]) : '#';
+                    }, true),
+                Action::make('upload_mod_header')
+                    ->label(trans('pelican-mod-manager::strings.actions.upload_mod'))
+                    ->tooltip(trans('pelican-mod-manager::strings.actions.upload_mod_tooltip'))
+                    ->icon('tabler-upload')
+                    ->color('primary')
+                    ->schema([
+                        FileUpload::make('file')
+                            ->label(trans('pelican-mod-manager::strings.page.mod_file'))
+                            ->required(),
                     ])
-                    ->default('all')
-                    ->visible(fn () => $this->activeTab === 'installed'),
+                    ->action(function (array $data) {
+                        /** @var Server $server */
+                        $server = Filament::getTenant();
+                        try {
+                            $filePath = $data['file'];
+                            if (!Str::endsWith(strtolower($filePath), ['.mrpack', '.zip', '.jar'])) {
+                                throw new Exception('Invalid file type. Only .jar, .mrpack, and .zip files are accepted.');
+                            }
+                            $absolutePath = null;
+                            $disk = null;
+                            foreach (['public', 'local'] as $diskName) {
+                                if (Storage::disk($diskName)->exists($filePath)) {
+                                    $absolutePath = Storage::disk($diskName)->path($filePath);
+                                    $disk = Storage::disk($diskName);
+                                    break;
+                                }
+                            }
+                            if (!$absolutePath) {
+                                foreach ([storage_path('app/' . $filePath), storage_path('app/public/' . $filePath), storage_path($filePath)] as $p) {
+                                    if (file_exists($p)) { $absolutePath = $p; break; }
+                                }
+                            }
+                            if (!$absolutePath || !file_exists($absolutePath)) throw new Exception('Uploaded file not found.');
+                            $type = ModrinthProjectType::fromServer($server);
+                            if (!$type) throw new Exception('Server does not support Modrinth mods or plugins');
+                            $folder = $type->getFolder();
+                            if (Str::endsWith(strtolower($filePath), ['.jar'])) {
+                                $filename = basename($absolutePath);
+                                $safeFilename = $this->validateFilename($filename);
+                                $sha1 = sha1_file($absolutePath);
+                                $jarContent = file_get_contents($absolutePath);
+                                if ($jarContent === false) throw new Exception('Failed to read uploaded jar file.');
+                                $fileRepository = app(DaemonFileRepository::class);
+                                $fileRepository->setServer($server)->putContent($folder . '/' . $safeFilename, $jarContent)->throw();
+                                if ($disk) { try { $disk->delete($filePath); } catch (Exception $e) {} }
+                                $resolved = false;
+                                $projectName = basename($safeFilename, '.jar');
+                                $projectSlug = $projectId = $versionId = $versionNumber = '';
+                                $author = null;
+                                if ($sha1) {
+                                    try {
+                                        $versionResponse = Http::asJson()->timeout(10)->connectTimeout(5)->get("https://api.modrinth.com/v2/version_file/{$sha1}?algorithm=sha1");
+                                        if ($versionResponse->successful()) {
+                                            $vd = $versionResponse->json();
+                                            $pId = $vd['project_id'] ?? null;
+                                            $vId = $vd['id'] ?? null;
+                                            if ($pId && $vId) {
+                                                $pr = Http::asJson()->timeout(10)->connectTimeout(5)->get("https://api.modrinth.com/v2/project/{$pId}");
+                                                if ($pr->successful()) {
+                                                    $pd = $pr->json();
+                                                    $projectId = $pId; $projectSlug = $pd['slug'] ?? ''; $projectName = $pd['title'] ?? $projectName;
+                                                    $versionId = $vId; $versionNumber = $vd['version_number'] ?? '';
+                                                    PelicanModManager::saveModMetadata($server, $projectId, $projectSlug, $projectName, $versionId, $versionNumber, $safeFilename, $author);
+                                                    $resolved = true;
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception $apiEx) { Log::warning('Modrinth API upload hash lookup failed: ' . $apiEx->getMessage()); }
+                                }
+                                $this->installedModsMetadata = null; $this->versionsCache = [];
+                                cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+                                $this->js('$wire.$refresh()');
+                                Notification::make()->title(trans('pelican-mod-manager::strings.notifications.install_success'))
+                                    ->body($resolved ? "Uploaded, verified and registered: {$projectName}" : "Uploaded as local mod: {$safeFilename}")->success()->send();
+                            } else {
+                                $tempDest = storage_path('app/modpack_import_' . $server->id . '.zip');
+                                if (file_exists($tempDest)) unlink($tempDest);
+                                if (!copy($absolutePath, $tempDest)) throw new Exception('Failed to prepare pack file.');
+                                if ($disk) { try { $disk->delete($filePath); } catch (Exception $e) {} }
+                                $this->isImporting = true; $this->importProgress = 5;
+                                $this->importStatus = 'Initializing modpack installation...';
+                                $this->importFilePath = $tempDest; $this->importFilesToDownload = null; $this->importDownloadedMods = [];
+                                Notification::make()->title(trans('pelican-mod-manager::strings.actions.upload_mod'))
+                                    ->body('Modpack installation started. Please keep this page open.')->info()->send();
+                            }
+                        } catch (Exception $exception) {
+                            report($exception);
+                            Notification::make()->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed'))
+                                ->body($exception->getMessage())->danger()->send();
+                        }
+                    }),
             ])
             ->bulkActions([
                 \Filament\Actions\BulkAction::make('delete')
@@ -1778,12 +1971,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         /** @var Server $server */
         $server = Filament::getTenant();
 
-        $type = ModrinthProjectType::fromServer($server);
-        if (!$type) {
+        if (!ModrinthProjectType::fromServer($server)) {
             return [];
         }
-
-        $folder = $type->getFolder();
 
         return [
             // Uninstall confirmation modal — CSS-hidden, triggered via openConfirmUninstall() Livewire method.
@@ -1860,200 +2050,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     $arguments['projectId'] ?? '',
                     ['project_id' => $arguments['projectId'] ?? '', 'title' => $arguments['title'] ?? '']
                 )),
-            Action::make('open_folder')
-                ->tooltip(fn () => trans('pelican-mod-manager::strings.page.open_folder', ['folder' => $folder]))
-                ->icon('tabler-folder-open')
-                ->url(fn () => ListFiles::getUrl(['path' => $folder]), true),
-            Action::make('upload_mod')
-                ->label(trans('pelican-mod-manager::strings.actions.upload_mod'))
-                ->tooltip(trans('pelican-mod-manager::strings.actions.upload_mod_tooltip'))
-                ->icon('tabler-upload')
-                ->color('primary')
-                ->schema([
-                    FileUpload::make('file')
-                        ->label(trans('pelican-mod-manager::strings.page.mod_file'))
-                        ->required(),
-                ])
-                ->action(function (array $data) use ($server) {
-                    try {
-                        $filePath = $data['file'];
-
-                        if (!Str::endsWith(strtolower($filePath), ['.mrpack', '.zip', '.jar'])) {
-                            throw new Exception('Invalid file type. Only .jar, .mrpack, and .zip files are accepted.');
-                        }
-
-                        $absolutePath = null;
-                        $disk = null;
-
-                        foreach (['public', 'local'] as $diskName) {
-                            if (Storage::disk($diskName)->exists($filePath)) {
-                                $absolutePath = Storage::disk($diskName)->path($filePath);
-                                $disk = Storage::disk($diskName);
-                                break;
-                            }
-                        }
-
-                        if (!$absolutePath) {
-                            $possiblePaths = [
-                                storage_path('app/' . $filePath),
-                                storage_path('app/public/' . $filePath),
-                                storage_path($filePath),
-                            ];
-                            foreach ($possiblePaths as $p) {
-                                if (file_exists($p)) {
-                                    $absolutePath = $p;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (!$absolutePath || !file_exists($absolutePath)) {
-                            throw new Exception('Uploaded file not found.');
-                        }
-
-                        $type = ModrinthProjectType::fromServer($server);
-                        if (!$type) {
-                            throw new Exception('Server does not support Modrinth mods or plugins');
-                        }
-
-                        $folder = $type->getFolder();
-
-                        if (Str::endsWith(strtolower($filePath), ['.jar'])) {
-                            $filename = basename($absolutePath);
-                            $safeFilename = $this->validateFilename($filename);
-                            $sha1 = sha1_file($absolutePath);
-
-                            $jarContent = file_get_contents($absolutePath);
-                            if ($jarContent === false) {
-                                throw new Exception('Failed to read uploaded jar file.');
-                            }
-
-                            $fileRepository = app(DaemonFileRepository::class);
-                            $fileRepository
-                                ->setServer($server)
-                                ->putContent($folder . '/' . $safeFilename, $jarContent)
-                                ->throw();
-
-                            if ($disk) {
-                                try {
-                                    $disk->delete($filePath);
-                                } catch (Exception $e) {}
-                            }
-
-                            $resolved = false;
-                            $projectName = basename($safeFilename, '.jar');
-                            $projectSlug = '';
-                            $projectId = '';
-                            $versionId = '';
-                            $versionNumber = '';
-                            $author = null;
-
-                            if ($sha1) {
-                                try {
-                                    $versionResponse = Http::asJson()
-                                        ->timeout(10)
-                                        ->connectTimeout(5)
-                                        ->get("https://api.modrinth.com/v2/version_file/{$sha1}?algorithm=sha1");
-
-                                    if ($versionResponse->successful()) {
-                                        $versionData = $versionResponse->json();
-                                        $pId = $versionData['project_id'] ?? null;
-                                        $vId = $versionData['id'] ?? null;
-                                        $vNum = $versionData['version_number'] ?? null;
-
-                                        if ($pId && $vId) {
-                                            $projectResponse = Http::asJson()
-                                                ->timeout(10)
-                                                ->connectTimeout(5)
-                                                ->get("https://api.modrinth.com/v2/project/{$pId}");
-
-                                            if ($projectResponse->successful()) {
-                                                $projectData = $projectResponse->json();
-                                                $projectId = $pId;
-                                                $projectSlug = $projectData['slug'] ?? '';
-                                                $projectName = $projectData['title'] ?? $projectName;
-                                                $versionId = $vId;
-                                                $versionNumber = $vNum ?? '';
-
-                                                PelicanModManager::saveModMetadata(
-                                                    $server,
-                                                    $projectId,
-                                                    $projectSlug,
-                                                    $projectName,
-                                                    $versionId,
-                                                    $versionNumber,
-                                                    $safeFilename,
-                                                    $author
-                                                );
-                                                $resolved = true;
-                                            }
-                                        }
-                                    }
-                                } catch (Exception $apiException) {
-                                    Log::warning('Modrinth API upload hash lookup failed: ' . $apiException->getMessage());
-                                }
-                            }
-
-                            $this->installedModsMetadata = null;
-                            $this->versionsCache = [];
-                            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-                            $this->js('$wire.$refresh()');
-
-                            if ($resolved) {
-                                Notification::make()
-                                    ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
-                                    ->body("Successfully uploaded, verified against Modrinth, and registered as a managed mod: {$projectName}")
-                                    ->success()
-                                    ->send();
-                            } else {
-                                Notification::make()
-                                    ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
-                                    ->body("Successfully uploaded as local mod: {$safeFilename}")
-                                    ->success()
-                                    ->send();
-                            }
-                        } else {
-                            $tempDest = storage_path('app/modpack_import_' . $server->id . '.zip');
-                            if (file_exists($tempDest)) {
-                                unlink($tempDest);
-                            }
-
-                            if (!copy($absolutePath, $tempDest)) {
-                                throw new Exception('Failed to prepare pack file.');
-                            }
-
-                            if ($disk) {
-                                try {
-                                    $disk->delete($filePath);
-                                } catch (Exception $e) {
-                                    // Ignore
-                                }
-                            }
-
-                            $this->isImporting = true;
-                            $this->importProgress = 5;
-                            $this->importStatus = 'Initializing modpack installation...';
-                            $this->importFilePath = $tempDest;
-                            $this->importFilesToDownload = null;
-                            $this->importDownloadedMods = [];
-
-                            Notification::make()
-                                ->title(trans('pelican-mod-manager::strings.actions.upload_mod'))
-                                ->body('Modpack installation started. Please keep this page open to track progress.')
-                                ->info()
-                                ->send();
-                        }
-
-                    } catch (Exception $exception) {
-                        report($exception);
-
-                        Notification::make()
-                            ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed'))
-                            ->body($exception->getMessage())
-                            ->danger()
-                            ->send();
-                    }
-                }),
         ];
     }
 
@@ -2787,7 +2783,112 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->badge(),
                     ]),
                 $this->getTabsContentComponent(),
+                TextEntry::make('installed_filter_bar')
+                    ->hiddenLabel()
+                    ->hidden(fn () => $this->activeTab !== 'installed')
+                    ->state(fn () => new HtmlString($this->renderInstalledFilterBar())),
                 EmbeddedTable::make(),
             ]);
+    }
+
+    protected function renderInstalledFilterBar(): string
+    {
+        $cur = $this->installedStatusFilter;
+        $hasDisabled = $this->installedHasDisabled;
+        $hasUpdates  = $this->installedHasUpdates;
+
+        $chipBase  = "display:inline-flex;align-items:center;padding:5px 14px;border-radius:9999px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid;transition:all 0.15s ease;background:none;";
+        $chipActive = $chipBase . "border-color:rgba(27,217,106,0.5);color:#1bd96a;background:rgba(27,217,106,0.1);";
+        $chipInactive = $chipBase . "border-color:rgba(255,255,255,0.1);color:#a1a1aa;";
+
+        $chips = '';
+        foreach (['all' => 'All', 'updates' => 'Updates', 'enabled' => 'Enabled', 'disabled' => 'Disabled'] as $key => $label) {
+            if ($key === 'updates' && !$hasUpdates) continue;
+            if (($key === 'enabled' || $key === 'disabled') && !$hasDisabled) continue;
+            $style = $cur === $key ? $chipActive : $chipInactive;
+            $hover = $cur !== $key ? " onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.1)'\"" : '';
+            $chips .= "<button type='button' wire:click=\"setInstalledFilter('{$key}')\" style=\"{$style}\"{$hover}>{$label}</button>";
+        }
+
+        $rightBtns = '';
+        if ($hasUpdates) {
+            $rightBtns .= "<button type='button' wire:click='updateAllMods' style='display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#1bd96a;color:#03150a;border:none;transition:opacity 0.15s ease;' onmouseover=\"this.style.opacity='0.88'\" onmouseout=\"this.style.opacity='1'\">"
+                . "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'/><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'/></svg>"
+                . "Update all</button>";
+        }
+        $rightBtns .= "<button type='button' wire:click='refreshInstalled' style='display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:#a1a1aa;border:1px solid rgba(255,255,255,0.12);transition:all 0.15s ease;' onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.12)'\">"
+            . "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='1 4 1 10 7 10'/><path d='M3.51 15a9 9 0 1 0 .49-4.95L1 10'/></svg>"
+            . "Refresh</button>";
+
+        return "<div class='pmm-filter-bar' style='display:flex;align-items:center;justify-content:space-between;padding:0 0 4px 0;'>"
+            . "<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;'>{$chips}</div>"
+            . "<div style='display:flex;gap:8px;align-items:center;'>{$rightBtns}</div>"
+            . "</div>";
+    }
+
+    public function setInstalledFilter(string $filter): void
+    {
+        $this->installedStatusFilter = $filter;
+    }
+
+    public function refreshInstalled(): void
+    {
+        $this->installedModsMetadata = null;
+        $this->versionsCache = [];
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        $this->js('$wire.$refresh()');
+        Notification::make()->title('Refreshed')->success()->send();
+    }
+
+    public function updateAllMods(): void
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) return;
+
+        $updated = 0;
+        $failed  = 0;
+
+        try {
+            $items = $this->getInstalledModsResolvedList($server, $type);
+        } catch (Exception $e) {
+            report($e);
+            Notification::make()->title('Failed to load mod list')->danger()->send();
+            return;
+        }
+
+        foreach ($items as $record) {
+            if (!empty($record['is_local'])) continue;
+            $versions = $this->getCachedVersions($record['project_id']);
+            if (empty($versions)) continue;
+            $meta = $record['metadata'] ?? null;
+            if (!$meta || ($meta['version_id'] ?? '') === ($versions[0]['id'] ?? '')) continue;
+
+            try {
+                $primaryFile = $this->getPrimaryFile($versions[0]['files'] ?? []);
+                if (!$primaryFile) continue;
+                $this->performInstallOrUpdate($server, $record, $versions[0], $primaryFile, $meta);
+                $updated++;
+            } catch (Exception $e) {
+                report($e);
+                $failed++;
+            }
+        }
+
+        $this->installedModsMetadata = null;
+        $this->versionsCache = [];
+        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        $this->js('$wire.$refresh()');
+
+        $msg = $failed === 0
+            ? "Updated {$updated} mod(s) successfully."
+            : "Updated {$updated} mod(s), {$failed} failed.";
+        ($failed === 0 ? Notification::make()->success() : Notification::make()->warning())
+            ->title($failed === 0 ? 'All mods updated' : 'Update completed with errors')
+            ->body($msg)
+            ->send();
     }
 }

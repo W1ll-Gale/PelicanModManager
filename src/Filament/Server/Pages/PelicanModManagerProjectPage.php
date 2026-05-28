@@ -275,39 +275,33 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     justify-content: center !important;
                 }
 
-                /* Mod — takes all remaining space */
+                /* Mod — left half (equal flex with td[4] so Version sits in the middle) */
                 .fi-ta-row > td:nth-child(2) {
-                    flex: 1 !important;
+                    flex: 1 1 0 !important;
                     min-width: 0 !important;
                     align-self: center !important;
                 }
 
-                /* Version + filename — fixed width, sits after the Mod column */
+                /* Version + filename — fixed-width centre column */
                 .fi-ta-row > td:nth-child(3) {
-                    flex: 0 0 220px !important;
-                    width: 220px !important;
-                    margin-left: 24px !important;
+                    flex: 0 0 210px !important;
+                    width: 210px !important;
                     align-self: center !important;
                 }
 
-                /* Change-version + toggle — pushed to far right via margin-left:auto, grouped with Delete */
+                /* All right-side controls (⇄ toggle 🗑 ⋮) — right half, content flushed right */
                 .fi-ta-row > td:nth-child(4) {
+                    flex: 1 1 0 !important;
                     display: flex !important;
-                    flex-shrink: 0 !important;
                     align-items: center !important;
-                    gap: 6px !important;
-                    margin-left: auto !important;
-                    padding-left: 16px !important;
+                    justify-content: flex-end !important;
+                    gap: 4px !important;
+                    overflow: visible !important;
                 }
 
-                /* Delete + three-dot — immediately follows toggle group */
+                /* Filament actions td — hidden (actions are rendered inside td[4] HtmlString) */
                 .fi-ta-row > td:last-child {
-                    display: flex !important;
-                    flex-shrink: 0 !important;
-                    flex-direction: row !important;
-                    align-items: center !important;
-                    gap: 4px !important;
-                    padding-left: 4px !important;
+                    display: none !important;
                 }
 
                 /* Disabled-row grayscale */
@@ -1301,10 +1295,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
                             </div>";
 
-                        // Three-dot Alpine.js dropdown
-                        $folderSvg = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0;'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
-                        $linkSvg   = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0;'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>";
+                        // SVG icons for dropdown items and buttons
+                        $trashSvg  = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>";
+                        $folderSvg = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
+                        $linkSvg   = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>";
+                        $dotsSvg   = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='5' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='12' cy='19' r='1'/></svg>";
 
+                        $iconBtnStyle = "background:none; border:none; cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#a1a1aa; border-radius:6px;";
+
+                        // Delete button — triggers Filament's uninstall action (with confirmation modal)
+                        $deleteBtn = "
+                            <button type='button'
+                                x-on:click.stop=\"\$wire.mountTableAction('uninstall', '{$projectId}')\"
+                                title='Uninstall'
+                                style='{$iconBtnStyle}'
+                                onmouseover=\"this.style.color='#ef4444'; this.style.background='rgba(239,68,68,0.1)'\"
+                                onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
+                                {$trashSvg}
+                            </button>";
+
+                        // "Copy link" dropdown item (hidden for local jars)
                         $copyLinkItem = (!$isLocal && $slug) ? "
                             <button type='button'
                                 x-on:click.stop=\"\$wire.copyModLink('{$slug}', '{$projectType}'); open=false\"
@@ -1314,21 +1324,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 {$linkSvg} Copy link
                             </button>" : '';
 
-                        $dotsBtnStyle = "background:none; border:none; cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#a1a1aa; border-radius:6px;";
-                        $dotsSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='5' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='12' cy='19' r='1'/></svg>";
-
+                        // Three-dot dropdown — uses position:fixed computed from getBoundingClientRect()
+                        // so the panel is never clipped by any parent overflow:hidden.
                         $dotsDropdown = "
-                            <div x-data=\"{ open: false }\" style='position:relative; display:inline-flex;'>
+                            <div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>
                                 <button type='button'
-                                    x-on:click.stop=\"open = !open\"
-                                    style='{$dotsBtnStyle}'
+                                    x-on:click.stop=\"open=!open; if(open){ let r=\$el.getBoundingClientRect(); py=r.bottom+4; px=r.right; }\"
+                                    style='{$iconBtnStyle}'
                                     onmouseover=\"this.style.background='rgba(255,255,255,0.08)'; this.style.color='#ffffff'\"
                                     onmouseout=\"this.style.background='none'; this.style.color='#a1a1aa'\">
                                     {$dotsSvg}
                                 </button>
                                 <div x-show=\"open\" x-cloak
-                                     x-on:click.away=\"open = false\"
-                                     style='position:absolute; right:0; top:calc(100% + 6px); background:#18181b; border:1px solid #3f3f46; border-radius:10px; padding:4px; min-width:155px; z-index:9999; box-shadow:0 12px 32px rgba(0,0,0,0.55);'>
+                                     x-on:click.away=\"open=false\"
+                                     :style=\"'position:fixed;top:'+py+'px;left:'+(px-160)+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:160px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6)'\" >
                                     <a href=\"{$showFileUrl}\"
                                        x-on:click.stop
                                        style='display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; text-decoration:none; white-space:nowrap;'
@@ -1340,10 +1349,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 </div>
                             </div>";
 
+                        // Final order: ⇄ change-version | toggle | 🗑 delete | ⋮ three-dot
                         return new HtmlString("
-                            <div style='display:flex; align-items:center; gap:6px;'>
+                            <div style='display:flex; align-items:center; gap:4px;'>
                                 {$changeVersionBtn}
                                 {$toggleHtml}
+                                {$deleteBtn}
                                 {$dotsDropdown}
                             </div>
                         ");
@@ -1538,6 +1549,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->icon('tabler-trash')
                     ->color('danger')
                     ->label(trans('pelican-mod-manager::strings.actions.uninstall'))
+                    ->extraAttributes(['style' => 'display:none !important'])
                     ->visible(function (array $record) {
                         if ($this->activeTab !== 'installed') {
                             return false;

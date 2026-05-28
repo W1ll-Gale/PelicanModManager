@@ -163,15 +163,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 overflow: visible !important;
             }
 
-            /* Filament wraps each column in <a class="fi-ta-col">; make it fill the td */
+            /* Filament's column link/text wrappers — ensure they don't constrain width */
             .fi-ta-row > td > a,
-            .fi-ta-row > td > .fi-ta-col {
-                display: block !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-            }
-
-            /* Inner text wrapper divs — must also be full-width blocks */
+            .fi-ta-row > td > .fi-ta-col,
             .fi-ta-row .fi-ta-text,
             .fi-ta-row .fi-ta-text-item {
                 display: block !important;
@@ -311,91 +305,57 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             CSS;
         } else {
             // Browse Mods tab ('all')
-            // NO checkbox td in browse mode — confirmed from HTML source.
-            // td[1]=title (contains icon+content+stats), td[2]=downloads (hidden),
-            // td[3]=date_modified (hidden), td[last/4]=actions (Install/Installed/Update + Versions buttons)
+            // NO checkbox td in browse mode.
+            // td[1]=title (full card HtmlString including buttons+stats), td[2]=downloads (hidden),
+            // td[3]=date_modified (hidden), td[last/4]=actions (Versions button only)
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
 
-                /* Row — top-align so the right panel doesn't stretch to match tall content */
+                /* Row — top-align so the versions button stays at the top */
                 .fi-ta-row {
                     align-items: flex-start !important;
                 }
 
-                /* Title — takes all available space, top-aligned */
+                /* Title td — takes all space; HtmlString handles its own internal layout */
                 .fi-ta-row > td:first-child {
                     flex: 1 !important;
                     min-width: 0 !important;
                     align-self: flex-start !important;
+                    overflow: visible !important;
                 }
 
-                /* Downloads and date_modified columns — hidden (data lives in title HtmlString) */
+                /* Unused data columns — hidden */
                 .fi-ta-row > td:nth-child(2),
                 .fi-ta-row > td:nth-child(3) {
                     display: none !important;
                 }
 
-                /* Actions column — stacked vertically, fixed width, top-aligned */
+                /* Actions column — just the Versions button, top-aligned, compact */
                 .fi-ta-row > td:last-child {
                     display: flex !important;
                     flex-shrink: 0 !important;
-                    width: 140px !important;
                     align-self: flex-start !important;
                     flex-direction: column !important;
                     align-items: stretch !important;
-                    gap: 8px !important;
-                    margin-left: 24px !important;
-                    padding-top: 2px !important;
-                }
-
-                /* Action buttons — full width, Modrinth-style */
-                .fi-ta-row > td:last-child .fi-btn {
-                    width: 100% !important;
-                    justify-content: center !important;
-                    padding: 7px 12px !important;
-                    font-size: 13px !important;
-                    font-weight: 600 !important;
-                    border-radius: 8px !important;
                     gap: 6px !important;
+                    margin-left: 12px !important;
+                    padding-top: 2px !important;
+                    min-width: 110px !important;
                 }
 
-                /* Install (active) — solid green */
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):not(:disabled) {
-                    background-color: #1bd96a !important;
-                    border-color: #1bd96a !important;
-                    color: #ffffff !important;
-                }
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:not([disabled]):not(:disabled):hover {
-                    background-color: #15c45f !important;
-                    border-color: #15c45f !important;
-                }
-
-                /* Installed (disabled) — green outline, transparent bg */
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success[disabled],
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-success:disabled {
-                    background-color: transparent !important;
-                    border: 1px solid #1bd96a !important;
-                    color: #1bd96a !important;
-                    opacity: 1 !important;
-                    cursor: default !important;
-                }
-
-                /* Update — amber */
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-warning {
-                    background-color: #f59e0b !important;
-                    border-color: #f59e0b !important;
-                    color: #ffffff !important;
-                }
-
-                /* Versions — subtle gray */
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray {
-                    background-color: rgba(255,255,255,0.06) !important;
-                    border: 1px solid rgba(255,255,255,0.1) !important;
+                /* Versions icon-button — style as a small outlined pill */
+                .fi-ta-row > td:last-child .fi-icon-btn {
+                    width: 100% !important;
+                    border-radius: 8px !important;
+                    padding: 7px 10px !important;
+                    border: 1px solid rgba(255,255,255,0.12) !important;
+                    background: rgba(255,255,255,0.04) !important;
                     color: #c4c4c8 !important;
+                    justify-content: center !important;
                 }
-                .fi-ta-row > td:last-child .fi-btn.fi-btn-color-gray:hover {
-                    background-color: rgba(255,255,255,0.1) !important;
-                    border-color: rgba(255,255,255,0.18) !important;
+                .fi-ta-row > td:last-child .fi-icon-btn:hover {
+                    background: rgba(255,255,255,0.08) !important;
+                    border-color: rgba(255,255,255,0.2) !important;
                 }
             CSS;
         }
@@ -970,44 +930,90 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $dateTooltip = 'Updated ' . $carbonDate->timezone($timezone)->format('M j, Y, g:i A T');
                         }
 
-                        // Right-side stats panel (aligned with action buttons column)
-                        $statsHtml = "";
-                        if (!empty($downloadsFormatted) || !empty($followsFormatted) || !empty($dateFormatted)) {
-                            $statsHtml = "
-                                <div style='flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; color: #a1a1aa; font-size: 12px; font-weight: 500; text-align: right; min-width: 110px;'>
-                                    <div style='display: flex; align-items: center; gap: 10px;'>
-                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$downloadsFormattedFull}'>
-                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
-                                            <span>{$downloadsFormatted}</span>
-                                        </div>
-                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$followsFormattedFull}'>
-                                            <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
-                                            <span>{$followsFormatted}</span>
-                                        </div>
-                                    </div>
-                                    <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$dateTooltip}'>
-                                        <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
-                                        <span>{$dateFormatted}</span>
-                                    </div>
-                                </div>
-                            ";
+                        // Determine install state for button rendering
+                        $installedMod = $this->getInstalledMod($record['project_id'] ?? '');
+                        $hasUpdate = false;
+                        if ($installedMod) {
+                            $versions = $this->getCachedVersions($record['project_id'] ?? '');
+                            $hasUpdate = !empty($versions) && ($installedMod['version_id'] !== ($versions[0]['id'] ?? null));
                         }
 
-                        // Tags row at bottom of content
-                        $tagsRow = $tagHtml ? "<div style='margin-top: 8px;'>{$tagHtml}</div>" : "";
+                        $projectId = e($record['project_id'] ?? '');
+                        $slug = e($record['slug'] ?? '');
+                        $projectType = e($record['project_type'] ?? 'mod');
+                        $modrinthUrl = "https://modrinth.com/{$projectType}/{$slug}";
+                        $isUnavailable = !empty($record['unavailable']);
+
+                        // Right-side action panel
+                        $actionBtnStyle = "display:inline-flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:7px 12px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; text-decoration:none; box-sizing:border-box; transition:all 0.15s ease;";
+
+                        if ($isUnavailable) {
+                            $actionBtnHtml = ""; // no button for unavailable mods
+                        } elseif ($installedMod && !$hasUpdate) {
+                            // Installed — green outline, non-clickable
+                            $actionBtnHtml = "
+                                <div style='{$actionBtnStyle} border:1px solid #1bd96a; background:transparent; color:#1bd96a; cursor:default;'>
+                                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'></polyline></svg>
+                                    Installed
+                                </div>";
+                        } elseif ($installedMod && $hasUpdate) {
+                            // Update available — amber outline button
+                            $actionBtnHtml = "
+                                <button type='button' wire:click.stop=\"updateMod('{$projectId}')\" style='{$actionBtnStyle} border:1px solid #f59e0b; background:transparent; color:#f59e0b;' onmouseover=\"this.style.background='rgba(245,158,11,0.1)'\" onmouseout=\"this.style.background='transparent'\">
+                                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'></polyline><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path></svg>
+                                    Update
+                                </button>";
+                        } else {
+                            // Not installed — green outline install button
+                            $actionBtnHtml = "
+                                <button type='button' wire:click.stop=\"installMod('{$projectId}')\" style='{$actionBtnStyle} border:1px solid #1bd96a; background:transparent; color:#1bd96a;' onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\" onmouseout=\"this.style.background='transparent'\">
+                                    <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'></line><line x1='5' y1='12' x2='19' y2='12'></line></svg>
+                                    Install
+                                </button>";
+                        }
+
+                        // Stats
+                        $statsHtml = "
+                            <div style='display:flex; align-items:center; gap:10px; color:#a1a1aa; font-size:12px; font-weight:500; margin-top:6px; justify-content:center;'>
+                                <div style='display:flex; align-items:center; gap:4px;' title='{$downloadsFormattedFull}'>
+                                    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
+                                    <span>{$downloadsFormatted}</span>
+                                </div>
+                                <div style='display:flex; align-items:center; gap:4px;' title='{$followsFormattedFull}'>
+                                    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
+                                    <span>{$followsFormatted}</span>
+                                </div>
+                            </div>
+                            <div style='display:flex; align-items:center; gap:4px; color:#a1a1aa; font-size:12px; font-weight:500; margin-top:4px; justify-content:center;' title='{$dateTooltip}'>
+                                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
+                                <span>{$dateFormatted}</span>
+                            </div>
+                        ";
+
+                        // Tags row
+                        $tagsRow = $tagHtml ? "<div style='margin-top:8px;'>{$tagHtml}</div>" : "";
+
+                        // Title as a Modrinth link (replaces recordUrl anchor wrapper)
+                        $titleLinkStyle = "font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; transition:color 0.15s ease;";
+                        $titleHtml = $isUnavailable
+                            ? "<span style='{$titleLinkStyle}'>{$title}</span>"
+                            : "<a href='{$modrinthUrl}' target='_blank' style='{$titleLinkStyle}' onmouseover=\"this.style.color='#1bd96a'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</a>";
 
                         return new HtmlString("
-                            <div style='display: flex; align-items: flex-start; gap: 16px; padding: 4px 0; width: 100%; box-sizing: border-box;'>
-                                <img src='{$iconUrl}' style='width: 72px; height: 72px; border-radius: 12px; object-fit: cover; border: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;' />
-                                <div style='flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;'>
-                                    <div style='display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;'>
-                                        <span style='font-size: 16px; font-weight: 700; color: #ffffff;'>{$title}</span>
+                            <div style='display:flex; align-items:flex-start; gap:16px; padding:4px 0; box-sizing:border-box;'>
+                                <img src='{$iconUrl}' style='width:72px; height:72px; border-radius:12px; object-fit:cover; border:1px solid rgba(255,255,255,0.08); flex-shrink:0;' />
+                                <div style='flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;'>
+                                    <div style='display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;'>
+                                        {$titleHtml}
                                         {$authorHtml}
                                     </div>
                                     {$descHtml}
                                     {$tagsRow}
                                 </div>
-                                {$statsHtml}
+                                <div style='flex-shrink:0; width:140px; display:flex; flex-direction:column; align-items:stretch; gap:0; padding-top:2px;'>
+                                    {$actionBtnHtml}
+                                    {$statsHtml}
+                                </div>
                             </div>
                         ");
                     })
@@ -1096,20 +1102,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->toggleable()
                     ->visible(fn () => $this->activeTab === 'all'),
             ])
-            ->recordUrl(function (array $record) {
-                if (!empty($record['unavailable'])) {
-                    return null;
-                }
-
-                return "https://modrinth.com/{$record['project_type']}/{$record['slug']}";
-            }, true)
             ->recordActions([
                 Action::make('versions')
                     ->button()
                     ->icon('tabler-list')
                     ->color('gray')
                     ->label(trans('pelican-mod-manager::strings.actions.versions'))
-                    ->visible(fn (array $record) => empty($record['unavailable']) && $this->activeTab === 'all')
+                    ->visible(fn (array $record) => empty($record['unavailable']))
                     ->modalSubmitAction(false)
                     ->schema(function (array $record) {
                         $versions = $this->getCachedVersions($record['project_id']);
@@ -1221,7 +1220,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return $sections;
                     }),
                 Action::make('install_latest')
-                    ->button()
                     ->icon('tabler-download')
                     ->color('success')
                     ->label(trans('pelican-mod-manager::strings.actions.install'))
@@ -1280,7 +1278,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('update')
-                    ->button()
                     ->icon('tabler-refresh')
                     ->color('warning')
                     ->label(trans('pelican-mod-manager::strings.actions.update'))
@@ -1362,7 +1359,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }),
                 Action::make('installed')
-                    ->button()
                     ->icon('tabler-check')
                     ->color('success')
                     ->label(trans('pelican-mod-manager::strings.actions.installed'))
@@ -2096,6 +2092,105 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->body(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed_body', [
                     'error' => $exception->getMessage(),
                 ]))
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function installMod(string $projectId): void
+    {
+        try {
+            /** @var Server $server */
+            $server = Filament::getTenant();
+
+            $versions = PelicanModManager::getProjectVersions($projectId, $server);
+
+            if (empty($versions)) {
+                throw new Exception('No compatible versions found');
+            }
+
+            $latestVersion = $versions[0];
+            $primaryFile = $this->getPrimaryFile($latestVersion['files']);
+
+            if (!$primaryFile) {
+                throw new Exception('No downloadable file found');
+            }
+
+            // Build a minimal record array from cached metadata
+            $record = ['project_id' => $projectId, 'title' => $latestVersion['name'] ?? $projectId];
+            $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile);
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
+                ->body(trans('pelican-mod-manager::strings.notifications.install_success_body', [
+                    'name' => $record['title'],
+                    'version' => $latestVersion['version_number'],
+                ]))
+                ->success()
+                ->send();
+        } catch (Exception $exception) {
+            report($exception);
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
+                ->body(trans('pelican-mod-manager::strings.notifications.install_failed_body'))
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function updateMod(string $projectId): void
+    {
+        try {
+            /** @var Server $server */
+            $server = Filament::getTenant();
+
+            $installedMod = $this->getInstalledMod($projectId);
+            if (!$installedMod) {
+                throw new Exception('Mod not found in metadata');
+            }
+
+            $versions = PelicanModManager::getProjectVersions($projectId, $server);
+
+            if (empty($versions)) {
+                throw new Exception('No compatible versions found');
+            }
+
+            $latestVersion = $versions[0];
+            $primaryFile = $this->getPrimaryFile($latestVersion['files']);
+
+            if (!$primaryFile) {
+                throw new Exception('No downloadable file found');
+            }
+
+            $record = ['project_id' => $projectId, 'title' => $installedMod['project_title'] ?? $projectId];
+            $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile, $installedMod);
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.update_success'))
+                ->body(trans('pelican-mod-manager::strings.notifications.update_success_body', [
+                    'version' => $latestVersion['version_number'],
+                ]))
+                ->success()
+                ->send();
+        } catch (Exception $exception) {
+            report($exception);
+
+            $this->installedModsMetadata = null;
+            $this->versionsCache = [];
+
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.update_failed'))
+                ->body(trans('pelican-mod-manager::strings.notifications.update_failed_body'))
                 ->danger()
                 ->send();
         }

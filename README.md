@@ -1,20 +1,40 @@
-# Minecraft Modrinth (by Boy132  & H1ghSyst3m)
+# Pelican Minecraft Mod Manager
 
-Easily download, update, and manage Minecraft mods and plugins directly from Modrinth within the server panel.
+A Minecraft mod and plugin manager for Pelican server panels, using Modrinth.
 
-## Setup
-
-Add `modrinth_mods` or `modrinth_plugins` to the _features_ of your egg to enable the mod/plugins page.
-Also make sure your egg has the `minecraft` _tag_ and a tag matching a Modrinth loader name. (e.g. `paper` or `neoforge`)
+This is a standalone fork of the original [Minecraft Modrinth](https://hub.pelican.dev/plugins/minecraft-modrinth) plugin by Boy132 & H1ghSyst3m, with major performance improvements and card layout styling changes.
 
 ## Features
 
-- **Browse and Search**: Access Modrinth's extensive mod library with search and pagination
-- **Smart Installation**: One-click install with automatic latest version selection
-- **Status Tracking**: See which mods are installed directly in the Modrinth list
-- **Update Detection**: Automatic detection of available updates with one-click upgrade
-- **Easy Uninstall**: Remove mods/plugins with confirmation and automatic file cleanup
-- **Metadata Management**: Tracks installed versions, filenames, and installation dates
-- **Version Compatibility**: Automatic filtering by Minecraft version and mod loader
-- **Seamless Installation**: Downloads to the correct server directory (mods/ or plugins/)
-- **Multilingual**: Supports English and German translations
+- **Modrinth Search**: Search and filter mods, plugins, and modpacks inside your server panel.
+- **Smart Installs**: Automatically downloads the latest compatible version based on your server loader and Minecraft version.
+- **Modpack Importing**: Import entire modpacks (from Modrinth packages or local zip/jar files) directly from the tab.
+- **Unified Management**: Manage both Modrinth-resolved mods and standard local jar files seamlessly in a single list.
+- **Status & Updates**: View installed mods, available updates, and manage them.
+- **Toggle switch**: Enable/disable mods directly by renaming `.jar` files to `.jar.disabled`.
+- **Local files**: Manage and delete local files not tracked by Modrinth.
+
+## Setup
+
+### Installation
+
+1. Download the latest `pelican-mod-manager.zip` from the releases tab.
+2. Go to your Pelican admin panel's **Plugins** tab.
+3. Upload the ZIP archive directly.
+
+### Egg Setup
+
+Configure your egg with the following:
+
+- **Features**: Add `modrinth_mods` and/or `modrinth_plugins` to the `features` array.
+- **Minecraft Tag**: The egg must have the `minecraft` tag.
+- **Loader Tag**: Add the loader tag (e.g. `paper`, `purpur`, `fabric`, `neoforge`, `forge`, `quilt`).
+
+## Credits & Acknowledgements
+
+Based on the original **Minecraft Modrinth** plugin by:
+- **Boy132** (Lead Developer)
+- **H1ghSyst3m** (Co-developer)
+
+## License
+MIT

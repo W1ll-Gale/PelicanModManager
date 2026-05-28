@@ -1,12 +1,12 @@
 {
-    "id": "minecraft-modrinth",
-    "name": "Minecraft Modrinth",
-    "author": "Boy132 & H1ghSyst3m",
+    "id": "pelican-mod-manager",
+    "name": "Pelican Minecraft Mod Manager",
+    "author": "MrBytesized",
     "version": "1.0.0",
-    "description": "Easily download, update, and manage minecraft mods & plugins from modrinth",
+    "description": "A Minecraft mod manager for Pelican Minecraft servers with Modrinth integration.",
     "category": "plugin",
-    "url": "https://hub.pelican.dev/plugins/minecraft-modrinth",
-    "update_url": "https://hub.pelican.dev/plugins/minecraft-modrinth/update.json",
+    "url": "https://github.com/MrBytesized/pelican-mod-manager",
+    "update_url": "https://github.com/MrBytesized/pelican-mod-manager/raw/main/update.json",
     "namespace": "Boy132\\MinecraftModrinth",
     "class": "MinecraftModrinthPlugin",
     "panels": [

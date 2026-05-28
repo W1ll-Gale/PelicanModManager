@@ -285,8 +285,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 /* Version + filename — fixed width */
                 .fi-ta-row > td:nth-child(3) {
                     flex-shrink: 0 !important;
-                    width: 200px !important;
-                    margin-left: 20px !important;
+                    width: 260px !important;
+                    margin-left: 28px !important;
                     align-self: center !important;
                 }
 
@@ -949,26 +949,40 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         if ($this->activeTab === 'installed') {
                             $isLocal = !empty($record['is_local']);
+                            $slug = e($record['slug'] ?? '');
+                            $projectType = e($record['project_type'] ?? 'mod');
 
-                            // Author row: hidden for local jars, hidden when Unknown
-                            if (!$isLocal && $author !== 'Unknown' && $author !== '') {
-                                $avatarUrl = "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
-                                $authorUrl = "https://modrinth.com/user/" . urlencode($author);
-                                $authorHtml = "<div style='display:flex;align-items:center;gap:6px;'>"
-                                    . "<img src=\"{$avatarUrl}\" style='width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);' />"
-                                    . "<a href=\"{$authorUrl}\" target='_blank' style='font-size:12px;color:#a1a1aa;text-decoration:none;' "
-                                    . "onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">"
-                                    . "{$author} <svg style='display:inline-block;width:10px;height:10px;margin-left:1px;vertical-align:baseline;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/><polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg>"
-                                    . "</a></div>";
+                            // Author row: hidden only for local jars
+                            if (!$isLocal) {
+                                if ($author !== 'Unknown' && $author !== '') {
+                                    $avatarUrl = "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
+                                    $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                                    $authorHtml = "<div style='display:flex;align-items:center;gap:6px;'>"
+                                        . "<img src=\"{$avatarUrl}\" style='width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);' />"
+                                        . "<a href=\"{$authorUrl}\" target='_blank' style='font-size:12px;color:#a1a1aa;text-decoration:none;' "
+                                        . "onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">"
+                                        . "{$author} <svg style='display:inline-block;width:10px;height:10px;margin-left:1px;vertical-align:baseline;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/><polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg>"
+                                        . "</a></div>";
+                                } else {
+                                    $authorHtml = "<span style='font-size:12px;color:#6b7280;'>Unknown</span>";
+                                }
                             } else {
                                 $authorHtml = '';
+                            }
+
+                            // Mod name: link to Modrinth for non-local mods with a slug
+                            if (!$isLocal && $slug) {
+                                $modrinthModUrl = "https://modrinth.com/{$projectType}/{$slug}";
+                                $titleEl = "<a href=\"{$modrinthModUrl}\" target='_blank' style='font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;' onmouseover=\"this.style.color='#1bd96a'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</a>";
+                            } else {
+                                $titleEl = "<span style='font-size:16px;font-weight:700;color:#ffffff;'>{$title}</span>";
                             }
 
                             return new HtmlString("
                                 <div style='display:flex;align-items:center;gap:16px;padding:4px 0;width:100%;'>
                                     {$iconEl}
                                     <div style='display:flex;flex-direction:column;gap:6px;'>
-                                        <span style='font-size:16px;font-weight:700;color:#ffffff;'>{$title}</span>
+                                        {$titleEl}
                                         {$authorHtml}
                                     </div>
                                 </div>
@@ -1177,15 +1191,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $version = $isLocal ? 'Local' : ($record['version_number'] ?? ($record['metadata']['version_number'] ?? 'Unknown'));
                         $filename = e($record['filename'] ?? '');
                         $projectId = e($record['project_id'] ?? '');
+                        $slug = e($record['slug'] ?? '');
+                        $projectType = e($record['project_type'] ?? 'mod');
 
                         $title = e($record['title'] ?? '');
 
-                        // Clickable version number opens the version changelog modal (unless local file)
-                        if (!$isLocal && $projectId) {
-                            $versionHtml = "<span
-                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
-                                style='font-size:14px; font-weight:700; color:#f3f4f6; cursor:pointer; text-decoration:underline dotted; text-underline-offset:3px;'
-                                title='View versions'>{$version}</span>";
+                        // Version number links to Modrinth version page (no underline)
+                        if (!$isLocal && $slug && $version !== 'Unknown') {
+                            $versionEncoded = rawurlencode($version);
+                            $versionUrl = "https://modrinth.com/{$projectType}/{$slug}/version/{$versionEncoded}";
+                            $versionHtml = "<a href=\"{$versionUrl}\" target='_blank' style='font-size:14px; font-weight:700; color:#f3f4f6; text-decoration:none;'>{$version}</a>";
                         } else {
                             $versionHtml = "<span style='font-size:14px; font-weight:700; color:#f3f4f6;'>{$version}</span>";
                         }
@@ -1235,7 +1250,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             <div x-on:click.stop=\"\$wire.toggleModStatus('{$projectId}', '{$filename}', {$isEnabledJs})\"
                                  title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
                                  style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; background:{$bg}; border-radius:9999px; transition:background 0.2s ease-in-out;'>
-                                <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#ffffff; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
+                                <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
                             </div>";
 
                         return new HtmlString("

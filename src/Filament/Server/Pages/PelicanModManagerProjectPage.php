@@ -1324,12 +1324,27 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 {$linkSvg} Copy link
                             </button>" : '';
 
-                        // Three-dot dropdown — uses position:fixed computed from getBoundingClientRect()
-                        // so the panel is never clipped by any parent overflow:hidden.
+                        // Three-dot dropdown
+                        // - position:fixed via getBoundingClientRect() → never clipped by parent overflow
+                        // - $dispatch('pmm-close-dropdowns') → closes every other open dropdown in the page
+                        // - x-on:pmm-close-dropdowns.window → each instance listens and closes itself
+                        // - x-on:click.away → closes when clicking anywhere outside this dropdown
                         $dotsDropdown = "
-                            <div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>
+                            <div x-data=\"{ open:false, py:0, px:0 }\"
+                                 x-on:pmm-close-dropdowns.window=\"open=false\"
+                                 style='display:inline-flex;'>
                                 <button type='button'
-                                    x-on:click.stop=\"open=!open; if(open){ let r=\$el.getBoundingClientRect(); py=r.bottom+4; px=r.right; }\"
+                                    x-ref='dotsbtn'
+                                    x-on:click.stop=\"
+                                        let prev=open;
+                                        \$dispatch('pmm-close-dropdowns');
+                                        if(!prev){
+                                            let r=\$refs.dotsbtn.getBoundingClientRect();
+                                            py=r.bottom+6;
+                                            px=Math.min(r.right, window.innerWidth-10);
+                                        }
+                                        open=!prev;
+                                    \"
                                     style='{$iconBtnStyle}'
                                     onmouseover=\"this.style.background='rgba(255,255,255,0.08)'; this.style.color='#ffffff'\"
                                     onmouseout=\"this.style.background='none'; this.style.color='#a1a1aa'\">
@@ -1337,9 +1352,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 </button>
                                 <div x-show=\"open\" x-cloak
                                      x-on:click.away=\"open=false\"
-                                     :style=\"'position:fixed;top:'+py+'px;left:'+(px-160)+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:160px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6)'\" >
+                                     :style=\"'position:fixed;top:'+py+'px;left:'+Math.max(4,px-162)+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:162px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6)'\" >
                                     <a href=\"{$showFileUrl}\"
-                                       x-on:click.stop
+                                       x-on:click.stop=\"open=false\"
                                        style='display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; text-decoration:none; white-space:nowrap;'
                                        onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\"
                                        onmouseout=\"this.style.background='transparent'\">
@@ -1350,8 +1365,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             </div>";
 
                         // Final order: ⇄ change-version | toggle | 🗑 delete | ⋮ three-dot
+                        // width:100% + justify-content:flex-end ensures the group is flush-right inside td[4]
                         return new HtmlString("
-                            <div style='display:flex; align-items:center; gap:4px;'>
+                            <div style='display:flex; align-items:center; gap:4px; width:100%; justify-content:flex-end;'>
                                 {$changeVersionBtn}
                                 {$toggleHtml}
                                 {$deleteBtn}

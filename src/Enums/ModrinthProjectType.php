@@ -1,6 +1,6 @@
 <?php
 
-namespace Boy132\MinecraftModrinth\Enums;
+namespace MrBytesized\PelicanModManager\Enums;
 
 use App\Models\Server;
 use Filament\Support\Contracts\HasLabel;
@@ -13,8 +13,8 @@ enum ModrinthProjectType: string implements HasLabel
     public function getLabel(): string
     {
         return match ($this) {
-            self::Mod => trans('minecraft-modrinth::strings.minecraft_mods'),
-            self::Plugin => trans('minecraft-modrinth::strings.minecraft_plugins'),
+            self::Mod => trans('pelican-mod-manager::strings.minecraft_mods'),
+            self::Plugin => trans('pelican-mod-manager::strings.minecraft_plugins'),
         };
     }
 

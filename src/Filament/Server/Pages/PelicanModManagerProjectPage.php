@@ -1,13 +1,13 @@
 <?php
 
-namespace Boy132\MinecraftModrinth\Filament\Server\Pages;
+namespace MrBytesized\PelicanModManager\Filament\Server\Pages;
 
 use App\Filament\Server\Resources\Files\Pages\ListFiles;
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
 use App\Traits\Filament\BlockAccessInConflict;
-use Boy132\MinecraftModrinth\Enums\ModrinthProjectType;
-use Boy132\MinecraftModrinth\Facades\MinecraftModrinth;
+use MrBytesized\PelicanModManager\Enums\ModrinthProjectType;
+use MrBytesized\PelicanModManager\Facades\PelicanModManager;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -35,7 +35,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 
-class MinecraftModrinthProjectPage extends Page implements HasTable
+class PelicanModManagerProjectPage extends Page implements HasTable
 {
     use BlockAccessInConflict;
     use HasTabs;
@@ -162,11 +162,11 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 box-sizing: border-box !important;
             }
 
-            /* OVERRIDE FILAMENT TEXT COLUMN WRAPPERS TO TAKE FULL WIDTH */
-            .fi-ta-row > td > div,
-            .fi-ta-row > td .fi-ta-col-wrp,
-            .fi-ta-row > td .fi-ta-text,
-            .fi-ta-row > td .fi-ta-text > div {
+            /* EXPAND WRAPPERS ONLY INSIDE THE TITLE CELL (always td:nth-child(2)) */
+            .fi-ta-row > td:nth-child(2) > div,
+            .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
+            .fi-ta-row > td:nth-child(2) .fi-ta-text,
+            .fi-ta-row > td:nth-child(2) .fi-ta-text > div {
                 display: flex !important;
                 width: 100% !important;
                 max-width: 100% !important;
@@ -257,44 +257,52 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         if ($this->activeTab === 'installed') {
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
+
+                /* Checkbox — kept visible for bulk uninstall */
                 .fi-ta-row > td:first-child {
-                    margin-right: 16px !important;
                     flex-shrink: 0 !important;
+                    width: auto !important;
+                    margin-right: 12px !important;
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
-                    width: auto !important;
                 }
 
+                /* Title — takes remaining space, vertically centred */
                 .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
                     display: flex !important;
+                    align-items: center !important;
                 }
 
+                /* Version + filename column */
                 .fi-ta-row > td:nth-child(3) {
                     flex-shrink: 0 !important;
-                    width: 220px !important;
-                    margin-left: 24px !important;
-                    margin-right: 24px !important;
+                    width: 180px !important;
+                    margin-left: 20px !important;
+                    margin-right: 20px !important;
                     display: flex !important;
                     align-items: center !important;
                 }
 
+                /* Enable/disable toggle */
                 .fi-ta-row > td:nth-child(4) {
                     flex-shrink: 0 !important;
-                    width: 80px !important;
-                    margin-right: 24px !important;
+                    width: 60px !important;
+                    margin-right: 20px !important;
                     display: flex !important;
                     align-items: center !important;
                     justify-content: center !important;
                 }
 
+                /* Actions — Update and Uninstall side by side */
                 .fi-ta-row > td:last-child {
                     flex-shrink: 0 !important;
                     display: inline-flex !important;
+                    flex-direction: row !important;
                     align-items: center !important;
-                    gap: 12px !important;
+                    gap: 10px !important;
                     justify-content: flex-end !important;
                 }
             CSS;
@@ -302,42 +310,51 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             // Browse Mods tab ('all')
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
-                .fi-ta-row {
-                    position: relative !important;
-                    min-height: 114px !important;
+
+                /* Collapse checkbox — no bulk-install exists in browse mode */
+                .fi-ta-row > td:first-child {
+                    width: 0 !important;
+                    max-width: 0 !important;
+                    overflow: hidden !important;
+                    opacity: 0 !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    flex-shrink: 0 !important;
+                    min-width: 0 !important;
                 }
 
-                .fi-ta-row > td:first-child {
+                /* Title column — expands to fill available space, top-aligned */
+                .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
                     display: flex !important;
+                    align-self: flex-start !important;
                 }
 
-                .fi-ta-row > td:first-child > div,
-                .fi-ta-row > td:first-child .fi-ta-col-wrp {
-                    padding-right: 140px !important;
-                    box-sizing: border-box !important;
-                }
-
-                .fi-ta-row > td:nth-child(2),
+                /* Hide the separate downloads and date_modified columns
+                   (their data is already embedded in the title column HTML) */
                 .fi-ta-row > td:nth-child(3),
-                .fi-ta-row > td:nth-child(4),
-                .fi-ta-row > td:nth-child(5) {
+                .fi-ta-row > td:nth-child(4) {
                     display: none !important;
                 }
 
+                /* Actions — static flow layout, top-aligned, stacked vertically */
                 .fi-ta-row > td:last-child {
-                    position: absolute !important;
-                    right: 20px !important;
-                    top: 16px !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    height: auto !important;
-                    z-index: 10 !important;
                     flex-shrink: 0 !important;
-                    display: inline-flex !important;
-                    align-items: center !important;
-                    justify-content: flex-end !important;
+                    align-self: flex-start !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: stretch !important;
+                    gap: 8px !important;
+                    margin-left: 20px !important;
+                    padding-top: 4px !important;
+                }
+
+                /* Full-width buttons inside the actions column */
+                .fi-ta-row > td:last-child .fi-btn {
+                    width: 100% !important;
+                    justify-content: center !important;
+                    min-width: 120px !important;
                 }
             CSS;
         }
@@ -352,12 +369,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         $server = Filament::getTenant();
         $type = ModrinthProjectType::fromServer($server);
         $tabLabel = $type === ModrinthProjectType::Plugin 
-            ? trans('minecraft-modrinth::strings.page.browse_plugins') 
-            : trans('minecraft-modrinth::strings.page.browse_mods');
+            ? trans('pelican-mod-manager::strings.page.browse_plugins') 
+            : trans('pelican-mod-manager::strings.page.browse_mods');
 
         return [
             'all' => Tab::make($tabLabel),
-            'installed' => Tab::make(trans('minecraft-modrinth::strings.page.view_installed')),
+            'installed' => Tab::make(trans('pelican-mod-manager::strings.page.view_installed')),
         ];
     }
 
@@ -368,7 +385,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             /** @var Server $server */
             $server = Filament::getTenant();
 
-            $this->installedModsMetadata = MinecraftModrinth::getInstalledModsMetadata($server);
+            $this->installedModsMetadata = PelicanModManager::getInstalledModsMetadata($server);
         }
 
         return $this->installedModsMetadata;
@@ -492,7 +509,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 'project_id' => $mod['project_id'],
                                 'slug' => $mod['project_slug'],
                                 'title' => $mod['project_title'],
-                                'description' => trans('minecraft-modrinth::strings.page.mod_unavailable'),
+                                'description' => trans('pelican-mod-manager::strings.page.mod_unavailable'),
                                 'icon_url' => null,
                                 'author' => $mod['author'] ?? '',
                                 'downloads' => 0,
@@ -581,7 +598,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
         if (!isset($this->versionsCache[$projectId])) {
             /** @var Server $server */
             $server = Filament::getTenant();
-            $this->versionsCache[$projectId] = MinecraftModrinth::getProjectVersions($projectId, $server);
+            $this->versionsCache[$projectId] = PelicanModManager::getProjectVersions($projectId, $server);
         }
 
         return $this->versionsCache[$projectId];
@@ -648,7 +665,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             ->pull($primaryFile['url'], $folder)
             ->throw();
 
-        $saved = MinecraftModrinth::saveModMetadata(
+        $saved = PelicanModManager::saveModMetadata(
             $server,
             $record['project_id'],
             $record['slug'],
@@ -696,7 +713,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                     report($rollbackException);
                 }
 
-                if ($installedMod && !MinecraftModrinth::saveModMetadata(
+                if ($installedMod && !PelicanModManager::saveModMetadata(
                     $server,
                     $record['project_id'],
                     $installedMod['project_slug'],
@@ -803,7 +820,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 } else {
                     $sortColumn = $this->getTableSortColumn();
                     $sortDirection = $this->getTableSortDirection();
-                    $response = MinecraftModrinth::getProjects($server, $page, $search, $sortColumn, $sortDirection);
+                    $response = PelicanModManager::getProjects($server, $page, $search, $sortColumn, $sortDirection);
 
                     return new LengthAwarePaginator($response['hits'], $response['total_hits'], 20, $page);
                 }
@@ -856,7 +873,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $showTags = array_slice($categories, 0, 3);
                             foreach ($showTags as $cat) {
                                 $catLabel = ucfirst(e($cat));
-                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background-color: #2d2f34; color: #e4e4e7; border: 1px solid rgba(255,255,255,0.04);'>{$catLabel}</span>";
+                                $tagHtml .= "<span style='display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; background-color: #27272a; color: #a1a1aa; border: 1px solid rgba(255,255,255,0.06);'>{$catLabel}</span>";
                             }
                             
                             if (count($categories) > 3) {
@@ -953,7 +970,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                     {$metadataFooterHtml}
                                 </div>
                             </div>
-                        ");");
+                        ");
                     })
                     ->description(null),
                 TextColumn::make('version')
@@ -1051,7 +1068,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Action::make('versions')
                     ->icon('tabler-list')
                     ->color('gray')
-                    ->label(trans('minecraft-modrinth::strings.actions.versions'))
+                    ->label(trans('pelican-mod-manager::strings.actions.versions'))
                     ->visible(fn (array $record) => empty($record['unavailable']))
                     ->modalSubmitAction(false)
                     ->schema(function (array $record) {
@@ -1066,7 +1083,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
                             $sectionComponents = [
                                 TextEntry::make('type_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.version.type'))
+                                    ->label(trans('pelican-mod-manager::strings.version.type'))
                                     ->state($versionData['version_type'] ?? '')
                                     ->badge()
                                     ->color(match ($versionData['version_type'] ?? '') {
@@ -1076,25 +1093,25 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                         default => 'gray',
                                     }),
                                 TextEntry::make('downloads_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.version.downloads'))
+                                    ->label(trans('pelican-mod-manager::strings.version.downloads'))
                                     ->state($versionData['downloads'] ?? 0)
                                     ->icon('tabler-download')
                                     ->numeric(),
                                 TextEntry::make('published_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.version.published'))
+                                    ->label(trans('pelican-mod-manager::strings.version.published'))
                                     ->state(fn () => isset($versionData['date_published']) ? Carbon::parse($versionData['date_published'], 'UTC')->diffForHumans() : ''),
                             ];
 
                             if (!empty($versionData['changelog'])) {
                                 $sectionComponents[] = TextEntry::make('changelog_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.version.changelog'))
+                                    ->label(trans('pelican-mod-manager::strings.version.changelog'))
                                     ->state($versionData['changelog'])
                                     ->markdown();
                             }
 
                             if (($versionData['id'] ?? null) === $installedVersionId) {
                                 $headerAction = Action::make('installed_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.actions.installed'))
+                                    ->label(trans('pelican-mod-manager::strings.actions.installed'))
                                     ->icon('tabler-check')
                                     ->color('success')
                                     ->disabled();
@@ -1102,7 +1119,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 $sectionIconColor = 'success';
                             } else {
                                 $headerAction = Action::make('install_version_' . $versionIndex)
-                                    ->label(trans('minecraft-modrinth::strings.actions.install'))
+                                    ->label(trans('pelican-mod-manager::strings.actions.install'))
                                     ->icon('tabler-download')
                                     ->visible($primaryFile !== null)
                                     ->action(function () use ($record, $versionData, $primaryFile) {
@@ -1123,8 +1140,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                             $this->js('$wire.$refresh()');
 
                                             Notification::make()
-                                                ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
-                                                ->body(trans('minecraft-modrinth::strings.notifications.install_success_body', [
+                                                ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
+                                                ->body(trans('pelican-mod-manager::strings.notifications.install_success_body', [
                                                     'name' => $record['title'],
                                                     'version' => $versionData['version_number'],
                                                 ]))
@@ -1138,8 +1155,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                             $this->js('$wire.$refresh()');
 
                                             Notification::make()
-                                                ->title(trans('minecraft-modrinth::strings.notifications.install_failed'))
-                                                ->body(trans('minecraft-modrinth::strings.notifications.install_failed_body'))
+                                                ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
+                                                ->body(trans('pelican-mod-manager::strings.notifications.install_failed_body'))
                                                 ->danger()
                                                 ->send();
                                         }
@@ -1166,7 +1183,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Action::make('install_latest')
                     ->icon('tabler-download')
                     ->color('success')
-                    ->label(trans('minecraft-modrinth::strings.actions.install'))
+                    ->label(trans('pelican-mod-manager::strings.actions.install'))
                     ->visible(function (array $record) {
                         if (!empty($record['is_local']) || !empty($record['unavailable'])) {
                             return false;
@@ -1180,7 +1197,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             /** @var Server $server */
                             $server = Filament::getTenant();
 
-                            $versions = MinecraftModrinth::getProjectVersions($record['project_id'], $server);
+                            $versions = PelicanModManager::getProjectVersions($record['project_id'], $server);
 
                             if (empty($versions)) {
                                 throw new Exception('No compatible versions found');
@@ -1200,8 +1217,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->versionsCache = [];
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.install_success_body', [
+                                ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.install_success_body', [
                                     'name' => $record['title'],
                                     'version' => $latestVersion['version_number'],
                                 ]))
@@ -1214,8 +1231,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->versionsCache = [];
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.install_failed'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.install_failed_body'))
+                                ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.install_failed_body'))
                                 ->danger()
                                 ->send();
                         }
@@ -1223,7 +1240,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Action::make('update')
                     ->icon('tabler-refresh')
                     ->color('warning')
-                    ->label(trans('minecraft-modrinth::strings.actions.update'))
+                    ->label(trans('pelican-mod-manager::strings.actions.update'))
                     ->visible(function (array $record) {
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
@@ -1240,12 +1257,12 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         return $installedMod['version_id'] !== $versions[0]['id'];
                     })
                     ->requiresConfirmation()
-                    ->modalHeading(trans('minecraft-modrinth::strings.modals.update_heading'))
+                    ->modalHeading(trans('pelican-mod-manager::strings.modals.update_heading'))
                     ->modalDescription(function (array $record) {
                         $installedMod = $this->getInstalledMod($record['project_id']);
                         $versions = $this->getCachedVersions($record['project_id']);
 
-                        return trans('minecraft-modrinth::strings.modals.update_description', [
+                        return trans('pelican-mod-manager::strings.modals.update_description', [
                             'old_version' => $installedMod['version_number'] ?? 'unknown',
                             'new_version' => $versions[0]['version_number'] ?? 'unknown',
                         ]);
@@ -1261,7 +1278,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 throw new Exception('Mod not found in metadata');
                             }
 
-                            $versions = MinecraftModrinth::getProjectVersions($record['project_id'], $server);
+                            $versions = PelicanModManager::getProjectVersions($record['project_id'], $server);
 
                             if (empty($versions)) {
                                 throw new Exception('No compatible versions found');
@@ -1281,8 +1298,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->versionsCache = [];
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.update_success'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.update_success_body', [
+                                ->title(trans('pelican-mod-manager::strings.notifications.update_success'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.update_success_body', [
                                     'version' => $latestVersion['version_number'],
                                 ]))
                                 ->success()
@@ -1294,8 +1311,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->versionsCache = [];
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.update_failed'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.update_failed_body'))
+                                ->title(trans('pelican-mod-manager::strings.notifications.update_failed'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.update_failed_body'))
                                 ->danger()
                                 ->send();
                         }
@@ -1303,7 +1320,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Action::make('installed')
                     ->icon('tabler-check')
                     ->color('success')
-                    ->label(trans('minecraft-modrinth::strings.actions.installed'))
+                    ->label(trans('pelican-mod-manager::strings.actions.installed'))
                     ->disabled()
                     ->visible(function (array $record) {
                         $installedMod = $this->getInstalledMod($record['project_id']);
@@ -1323,7 +1340,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Action::make('uninstall')
                     ->icon('tabler-trash')
                     ->color('danger')
-                    ->label(trans('minecraft-modrinth::strings.actions.uninstall'))
+                    ->label(trans('pelican-mod-manager::strings.actions.uninstall'))
                     ->visible(function (array $record) {
                         if ($this->activeTab !== 'installed') {
                             return false;
@@ -1334,8 +1351,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         return !is_null($this->getInstalledMod($record['project_id']));
                     })
                     ->requiresConfirmation()
-                    ->modalHeading(fn (array $record) => trans('minecraft-modrinth::strings.modals.uninstall_heading'))
-                    ->modalDescription(fn (array $record) => trans('minecraft-modrinth::strings.modals.uninstall_description', ['name' => $record['title']]))
+                    ->modalHeading(fn (array $record) => trans('pelican-mod-manager::strings.modals.uninstall_heading'))
+                    ->modalDescription(fn (array $record) => trans('pelican-mod-manager::strings.modals.uninstall_description', ['name' => $record['title']]))
                     ->action(function (array $record) {
                         try {
                             /** @var Server $server */
@@ -1369,7 +1386,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 ->throw();
 
                             if (empty($record['is_local'])) {
-                                $metadataRemoved = MinecraftModrinth::removeModMetadata($server, $record['project_id']);
+                                $metadataRemoved = PelicanModManager::removeModMetadata($server, $record['project_id']);
 
                                 if (!$metadataRemoved) {
                                     Log::warning('Failed to remove mod metadata after successful file deletion', [
@@ -1398,8 +1415,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_success'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.uninstall_success_body', [
+                                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.uninstall_success_body', [
                                     'name' => $record['title'],
                                 ]))
                                 ->success()
@@ -1415,8 +1432,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_failed'))
-                                ->body(trans('minecraft-modrinth::strings.notifications.uninstall_failed_body'))
+                                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
+                                ->body(trans('pelican-mod-manager::strings.notifications.uninstall_failed_body'))
                                 ->danger()
                                 ->send();
                         }
@@ -1436,7 +1453,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             ])
             ->bulkActions([
                 \Filament\Actions\BulkAction::make('delete')
-                    ->label(trans('minecraft-modrinth::strings.actions.uninstall'))
+                    ->label(trans('pelican-mod-manager::strings.actions.uninstall'))
                     ->icon('tabler-trash')
                     ->color('danger')
                     ->requiresConfirmation()
@@ -1483,7 +1500,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
 
                             foreach ($projectIdsToRemove as $pId) {
-                                MinecraftModrinth::removeModMetadata($server, $pId);
+                                PelicanModManager::removeModMetadata($server, $pId);
                             }
 
                             $this->installedModsMetadata = null;
@@ -1491,14 +1508,14 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->js('$wire.$refresh()');
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_success'))
+                                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
                                 ->body('Successfully uninstalled selected mods.')
                                 ->success()
                                 ->send();
                         } catch (Exception $e) {
                             report($e);
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.notifications.uninstall_failed'))
+                                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
                                 ->body($e->getMessage())
                                 ->danger()
                                 ->send();
@@ -1521,17 +1538,17 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
         return [
             Action::make('open_folder')
-                ->tooltip(fn () => trans('minecraft-modrinth::strings.page.open_folder', ['folder' => $folder]))
+                ->tooltip(fn () => trans('pelican-mod-manager::strings.page.open_folder', ['folder' => $folder]))
                 ->icon('tabler-folder-open')
                 ->url(fn () => ListFiles::getUrl(['path' => $folder]), true),
             Action::make('upload_mod')
-                ->label(trans('minecraft-modrinth::strings.actions.upload_mod'))
-                ->tooltip(trans('minecraft-modrinth::strings.actions.upload_mod_tooltip'))
+                ->label(trans('pelican-mod-manager::strings.actions.upload_mod'))
+                ->tooltip(trans('pelican-mod-manager::strings.actions.upload_mod_tooltip'))
                 ->icon('tabler-upload')
                 ->color('primary')
                 ->schema([
                     FileUpload::make('file')
-                        ->label(trans('minecraft-modrinth::strings.page.mod_file'))
+                        ->label(trans('pelican-mod-manager::strings.page.mod_file'))
                         ->required(),
                 ])
                 ->action(function (array $data) use ($server) {
@@ -1635,7 +1652,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                                 $versionId = $vId;
                                                 $versionNumber = $vNum ?? '';
 
-                                                MinecraftModrinth::saveModMetadata(
+                                                PelicanModManager::saveModMetadata(
                                                     $server,
                                                     $projectId,
                                                     $projectSlug,
@@ -1661,13 +1678,13 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
 
                             if ($resolved) {
                                 Notification::make()
-                                    ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
+                                    ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
                                     ->body("Successfully uploaded, verified against Modrinth, and registered as a managed mod: {$projectName}")
                                     ->success()
                                     ->send();
                             } else {
                                 Notification::make()
-                                    ->title(trans('minecraft-modrinth::strings.notifications.install_success'))
+                                    ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
                                     ->body("Successfully uploaded as local mod: {$safeFilename}")
                                     ->success()
                                     ->send();
@@ -1698,7 +1715,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             $this->importDownloadedMods = [];
 
                             Notification::make()
-                                ->title(trans('minecraft-modrinth::strings.actions.upload_mod'))
+                                ->title(trans('pelican-mod-manager::strings.actions.upload_mod'))
                                 ->body('Modpack installation started. Please keep this page open to track progress.')
                                 ->info()
                                 ->send();
@@ -1708,7 +1725,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         report($exception);
 
                         Notification::make()
-                            ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed'))
+                            ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed'))
                             ->body($exception->getMessage())
                             ->danger()
                             ->send();
@@ -1972,7 +1989,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 }
 
                 if (!empty($resolvedMods)) {
-                    MinecraftModrinth::saveModsMetadata($server, $resolvedMods);
+                    PelicanModManager::saveModsMetadata($server, $resolvedMods);
                 }
 
                 $this->importProgress = 95;
@@ -2001,8 +2018,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             $this->js('$wire.$refresh()');
 
             Notification::make()
-                ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success'))
-                ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_success_body'))
+                ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_success'))
+                ->body(trans('pelican-mod-manager::strings.notifications.mrpack_upload_success_body'))
                 ->success()
                 ->send();
 
@@ -2029,8 +2046,8 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             $this->js('$wire.$refresh()');
 
             Notification::make()
-                ->title(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed'))
-                ->body(trans('minecraft-modrinth::strings.notifications.mrpack_upload_failed_body', [
+                ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed'))
+                ->body(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed_body', [
                     'error' => $exception->getMessage(),
                 ]))
                 ->danger()
@@ -2075,7 +2092,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
             if ($cleanProjectId) {
                 $installedMod = $this->getInstalledMod($cleanProjectId);
                 if ($installedMod) {
-                    MinecraftModrinth::saveModMetadata(
+                    PelicanModManager::saveModMetadata(
                         $server,
                         $cleanProjectId,
                         $installedMod['project_slug'],
@@ -2279,18 +2296,18 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                 Grid::make(3)
                     ->schema([
                         TextEntry::make('Minecraft Version')
-                            ->state(fn () => MinecraftModrinth::getMinecraftVersion($server) ?? trans('minecraft-modrinth::strings.page.unknown'))
+                            ->state(fn () => PelicanModManager::getMinecraftVersion($server) ?? trans('pelican-mod-manager::strings.page.unknown'))
                             ->badge(),
                         TextEntry::make('Loader')
-                            ->state(fn () => MinecraftModrinth::getLoaderFromServer($server)['display_name'] ?? trans('minecraft-modrinth::strings.page.unknown'))
-                            ->icon(fn () => new HtmlString(MinecraftModrinth::getLoaderFromServer($server)['icon'] ?? ''))
+                            ->state(fn () => PelicanModManager::getLoaderFromServer($server)['display_name'] ?? trans('pelican-mod-manager::strings.page.unknown'))
+                            ->icon(fn () => new HtmlString(PelicanModManager::getLoaderFromServer($server)['icon'] ?? ''))
                             ->badge(),
                         TextEntry::make('installed')
-                            ->label(fn () => trans('minecraft-modrinth::strings.page.installed', ['type' => $type?->getLabel() ?? 'Modrinth']))
+                            ->label(fn () => trans('pelican-mod-manager::strings.page.installed', ['type' => $type?->getLabel() ?? 'Modrinth']))
                             ->state(function (DaemonFileRepository $fileRepository) use ($server, $type) {
                                 try {
                                     if (!$type) {
-                                        return trans('minecraft-modrinth::strings.page.unknown');
+                                        return trans('pelican-mod-manager::strings.page.unknown');
                                     }
 
                                     $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
@@ -2305,7 +2322,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 } catch (Exception $exception) {
                                     report($exception);
 
-                                    return trans('minecraft-modrinth::strings.page.unknown');
+                                    return trans('pelican-mod-manager::strings.page.unknown');
                                 }
                             })
                             ->badge(),

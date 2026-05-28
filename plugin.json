@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "description": "A Minecraft mod manager for Pelican Minecraft servers with Modrinth integration.",
     "category": "plugin",
-    "url": "https://github.com/MrBytesized/pelican-mod-manager",
-    "update_url": "https://github.com/MrBytesized/pelican-mod-manager/raw/main/update.json",
-    "namespace": "Boy132\\MinecraftModrinth",
-    "class": "MinecraftModrinthPlugin",
+    "url": "https://github.com/W1ll-Gale/PelicanModManager",
+    "update_url": "https://github.com/W1ll-Gale/PelicanModManager/raw/main/update.json",
+    "namespace": "MrBytesized\\PelicanModManager",
+    "class": "PelicanModManagerPlugin",
     "panels": [
         "server"
     ],

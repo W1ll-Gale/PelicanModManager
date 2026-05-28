@@ -1,25 +1,25 @@
 <?php
 
-namespace Boy132\MinecraftModrinth;
+namespace MrBytesized\PelicanModManager;
 
 use App\Traits\EnvironmentWriterTrait;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
 
-class MinecraftModrinthPlugin implements Plugin
+class PelicanModManagerPlugin implements Plugin
 {
     use EnvironmentWriterTrait;
 
     public function getId(): string
     {
-        return 'minecraft-modrinth';
+        return 'pelican-mod-manager';
     }
 
     public function register(Panel $panel): void
     {
         $id = str($panel->getId())->title();
 
-        $panel->discoverPages(plugin_path($this->getId(), "src/Filament/$id/Pages"), "Boy132\\MinecraftModrinth\\Filament\\$id\\Pages");
+        $panel->discoverPages(plugin_path($this->getId(), "src/Filament/$id/Pages"), "MrBytesized\\PelicanModManager\\Filament\\$id\\Pages");
     }
 
     public function boot(Panel $panel): void {}

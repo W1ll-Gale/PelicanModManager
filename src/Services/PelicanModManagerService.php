@@ -1,15 +1,15 @@
 <?php
 
-namespace Boy132\MinecraftModrinth\Services;
+namespace MrBytesized\PelicanModManager\Services;
 
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
-use Boy132\MinecraftModrinth\Enums\ModrinthProjectType;
+use MrBytesized\PelicanModManager\Enums\ModrinthProjectType;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
-class MinecraftModrinthService
+class PelicanModManagerService
 {
     public function getMinecraftVersion(Server $server): ?string
     {
@@ -254,7 +254,7 @@ class MinecraftModrinthService
                     'project_id' => $installedMod['project_id'],
                     'slug' => $installedMod['project_slug'],
                     'title' => $installedMod['project_title'],
-                    'description' => trans('minecraft-modrinth::strings.page.mod_unavailable'),
+                    'description' => trans('pelican-mod-manager::strings.page.mod_unavailable'),
                     'icon_url' => null,
                     'author' => $installedMod['author'] ?? '',
                     'downloads' => 0,

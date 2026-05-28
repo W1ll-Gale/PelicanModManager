@@ -1,9 +1,9 @@
 <?php
 
-namespace Boy132\MinecraftModrinth\Facades;
+namespace MrBytesized\PelicanModManager\Facades;
 
 use App\Models\Server;
-use Boy132\MinecraftModrinth\Services\MinecraftModrinthService;
+use MrBytesized\PelicanModManager\Services\PelicanModManagerService;
 use Illuminate\Support\Facades\Facade;
 
 /**
@@ -24,12 +24,12 @@ use Illuminate\Support\Facades\Facade;
  * @method static bool isUpdateAvailable(array{version_id: string, version_number: string} $installedMod, array<int, array{id: string, version_number: string}> $availableVersions)
  * @method static array<string> getInstalledMods(Server $server)
  *
- * @see MinecraftModrinthService
+ * @see PelicanModManagerService
  */
-class MinecraftModrinth extends Facade
+class PelicanModManager extends Facade
 {
     protected static function getFacadeAccessor(): string
     {
-        return MinecraftModrinthService::class;
+        return PelicanModManagerService::class;
     }
 }

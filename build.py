@@ -22,7 +22,7 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             # Create standard relative path from root
             arcname = os.path.relpath(file_path, '.')
             
-            # Pelican loader expects the root folder inside the zip to be 'minecraft-modrinth' or matching plugin name.
+            # Pelican loader expects the root folder inside the zip to match the plugin id.
             # To be safe and compatible with standard Pelican plugin installer zips, 
             # we pack the files under a folder matching the namespace/plugin directory structure: 'pelican-mod-manager/'
             arcname_packed = os.path.join('pelican-mod-manager', arcname)

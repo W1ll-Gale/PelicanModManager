@@ -17,6 +17,8 @@ return [
         'installed' => 'Installed :type',
         'unknown' => 'Unknown',
         'view_all' => 'All',
+        'browse_mods' => 'Browse Mods',
+        'browse_plugins' => 'Browse Plugins',
         'view_installed' => 'Installed',
         'mod_unavailable' => 'This mod/plugin is no longer available on Modrinth',
         'mod_file' => 'Mod or Modpack File (.jar, .mrpack, .zip)',

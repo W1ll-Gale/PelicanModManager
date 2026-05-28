@@ -101,8 +101,15 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
     /** @return array<string, Tab> */
     public function getTabs(): array
     {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        $tabLabel = $type === ModrinthProjectType::Plugins 
+            ? trans('minecraft-modrinth::strings.page.browse_plugins') 
+            : trans('minecraft-modrinth::strings.page.browse_mods');
+
         return [
-            'all' => Tab::make(trans('minecraft-modrinth::strings.page.view_all')),
+            'all' => Tab::make($tabLabel),
             'installed' => Tab::make(trans('minecraft-modrinth::strings.page.view_installed')),
         ];
     }
@@ -588,6 +595,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
                                 width: 100% !important;
                                 box-sizing: border-box !important;
+                                position: relative !important; /* Crucial for absolute positioning of right panel items */
                             }
                             
                             .fi-ta-row:hover {
@@ -610,12 +618,16 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             }
                             
                             /* =========================================================================
-                               ALL TAB (No selection checkbox)
-                               - 1st cell: Title (flex: 1)
+                               BROWSE/ALL TAB (No selection checkbox)
+                               - 1st cell: Title (flex: 1, padding right for absolute positioned right panel)
                                - 2nd cell: Downloads (Hidden)
                                - 3rd cell: Date Modified (Hidden)
-                               - 4th cell: Actions (last-child, flex-shrink: 0)
+                               - 4th cell: Actions (last-child, absolute-positioned at top-right)
                                ========================================================================= */
+                            
+                            .fi-ta-row:not(:has(input[type="checkbox"])) {
+                                min-height: 114px !important;
+                            }
                             
                             .fi-ta-row:not(:has(input[type="checkbox"])) > td:first-child {
                                 flex: 1 !important;
@@ -623,10 +635,36 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 display: block !important;
                             }
                             
+                            /* Prevent description overlapping stats and buttons on the right */
+                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:first-child > div,
+                            .fi-ta-row:not(:has(input[type="checkbox"])) .fi-ta-col-wrp,
+                            .fi-ta-row:not(:has(input[type="checkbox"])) .fi-ta-text {
+                                padding-right: 170px !important;
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                display: block !important;
+                                box-sizing: border-box !important;
+                            }
+                            
                             /* Hide redundant cells on All tab */
                             .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(2),
                             .fi-ta-row:not(:has(input[type="checkbox"])) > td:nth-child(3) {
                                 display: none !important;
+                            }
+                            
+                            /* Absolute position actions cell on Browse tab */
+                            .fi-ta-row:not(:has(input[type="checkbox"])) > td:last-child {
+                                position: absolute !important;
+                                right: 20px !important;
+                                top: 16px !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                height: auto !important;
+                                z-index: 10 !important;
+                                flex-shrink: 0 !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                justify-content: flex-end !important;
                             }
                             
                             /* =========================================================================
@@ -680,17 +718,23 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                 color: initial !important;
                             }
                             
+                            /* Default actions column alignment for Installed tab */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:last-child {
+                                flex-shrink: 0 !important;
+                                display: inline-flex !important;
+                                align-items: center !important;
+                                gap: 12px !important;
+                                justify-content: flex-end !important;
+                            }
+                            
                             /* =========================================================================
                                COMMON ELEMENTS & CONTENT WRAPPER RESETS
                                ========================================================================= */
                             
-                            /* Ensure the inner Filament wrappers expand to fill the cell width */
-                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) > div,
-                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) .fi-ta-col-wrp,
-                            .fi-ta-row > td:first-child:not(:has(input[type="checkbox"])) .fi-ta-text,
-                            .fi-ta-row > td:nth-child(2) > div,
-                            .fi-ta-row > td:nth-child(2) .fi-ta-col-wrp,
-                            .fi-ta-row > td:nth-child(2) .fi-ta-text {
+                            /* Ensure the inner Filament wrappers expand to fill the cell width on Installed tab */
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) > div,
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) .fi-ta-col-wrp,
+                            .fi-ta-row:has(input[type="checkbox"]) > td:nth-child(2) .fi-ta-text {
                                 width: 100% !important;
                                 max-width: 100% !important;
                                 display: block !important;
@@ -705,15 +749,6 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                             /* Format svg icons inside columns */
                             .fi-ta-row > td svg {
                                 color: #a1a1aa !important;
-                            }
-                            
-                            /* Actions Column alignment (always the last-child) */
-                            .fi-ta-row > td:last-child {
-                                flex-shrink: 0 !important;
-                                display: inline-flex !important;
-                                align-items: center !important;
-                                gap: 12px !important;
-                                justify-content: flex-end !important;
                             }
                             
                             /* Style buttons inside cards to look premium and consistent */
@@ -812,7 +847,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $tagHtml = '';
                         
                         if (!empty($categories) && is_array($categories)) {
-                            $tagHtml .= "<div style='display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;'>";
+                            $tagHtml .= "<div style='display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;'>";
                             
                             $showTags = array_slice($categories, 0, 3);
                             foreach ($showTags as $cat) {
@@ -831,15 +866,15 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         $authorUrl = "https://modrinth.com/user/" . urlencode($author);
                         $authorHtml = "";
                         if ($author && $author !== 'Unknown') {
-                            $authorHtml = "<span style='font-size: 13px; color: #a1a1aa; font-weight: 400;'>by <a href='{$authorUrl}' target='_blank' style='color: #10b981; text-decoration: none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$author} <svg style='display: inline-block; width: 10px; height: 10px; margin-left: 1px; vertical-align: baseline; color: #a1a1aa;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a></span>";
+                            $authorHtml = "<span style='font-size: 13.5px; color: #a1a1aa; font-weight: 400; margin-left: 2px;'>by <a href='{$authorUrl}' target='_blank' style='color: #c8c9cb; text-decoration: none; font-weight: 500;' onmouseover=\"this.style.textDecoration='underline'; this.style.color='#ffffff'\" onmouseout=\"this.style.textDecoration='none'; this.style.color='#c8c9cb'\">{$author} <svg style='display: inline-block; width: 11px; height: 11px; margin-left: 2px; vertical-align: middle; color: #a1a1aa;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'></path><polyline points='15 3 21 3 21 9'></polyline><line x1='10' y1='14' x2='21' y2='3'></line></svg></a></span>";
                         }
                         
                         $descHtml = "";
                         if ($description) {
-                            $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 4px; max-width: 750px; word-break: break-word; white-space: normal !important;'>{$description}</div>";
+                            $descHtml = "<div style='font-size: 13.5px; color: #a1a1aa; line-height: 1.5; margin-top: 6px; max-width: 750px; word-break: break-word; white-space: normal !important;'>{$description}</div>";
                         }
                         
-                        // Dynamic statistics formatting for 'all' tab vertical stack
+                        // Dynamic statistics formatting for 'all' tab
                         $downloads = (int)($record['downloads'] ?? 0);
                         $downloadsFormatted = '';
                         if ($downloads >= 1000000) {
@@ -849,6 +884,7 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         } else {
                             $downloadsFormatted = $downloads;
                         }
+                        $downloadsFormattedFull = number_format($downloads) . ' downloads';
 
                         $follows = (int)($record['follows'] ?? 0);
                         $followsFormatted = '';
@@ -859,11 +895,17 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                         } else {
                             $followsFormatted = $follows;
                         }
+                        $followsFormattedFull = number_format($follows) . ' followers';
 
                         $dateModified = $record['date_modified'] ?? null;
                         $dateFormatted = '';
+                        $dateTooltip = '';
                         if ($dateModified) {
-                            $dateFormatted = Carbon::parse($dateModified, 'UTC')->diffForHumans();
+                            $carbonDate = Carbon::parse($dateModified, 'UTC');
+                            $dateFormatted = $carbonDate->diffForHumans();
+                            
+                            $timezone = function_exists('user') && user() ? (user()->timezone ?? 'UTC') : 'UTC';
+                            $dateTooltip = 'Updated ' . $carbonDate->timezone($timezone)->format('M j, Y, g:i A T');
                         }
                         
                         return new HtmlString("
@@ -878,18 +920,18 @@ class MinecraftModrinthProjectPage extends Page implements HasTable
                                     {$descHtml}
                                     {$tagHtml}
                                 </div>
-                                <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-left: 24px; flex-shrink: 0; color: #a1a1aa; font-size: 13px; font-weight: 500; padding-top: 4px;'>
+                                <div class='modrinth-card-stats' style='position: absolute; right: 20px; bottom: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; color: #a1a1aa; font-size: 12.5px; font-weight: 500; z-index: 5;'>
                                     <div style='display: flex; align-items: center; gap: 12px;'>
-                                        <div style='display: flex; align-items: center; gap: 4px;' title='Downloads'>
+                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$downloadsFormattedFull}'>
                                             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
                                             <span>{$downloadsFormatted}</span>
                                         </div>
-                                        <div style='display: flex; align-items: center; gap: 4px;' title='Followers'>
+                                        <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$followsFormattedFull}'>
                                             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
                                             <span>{$followsFormatted}</span>
                                         </div>
                                     </div>
-                                    <div style='display: flex; align-items: center; gap: 4px;' title='Last updated'>
+                                    <div style='display: flex; align-items: center; gap: 4px; cursor: help;' title='{$dateTooltip}'>
                                         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
                                         <span>{$dateFormatted}</span>
                                     </div>

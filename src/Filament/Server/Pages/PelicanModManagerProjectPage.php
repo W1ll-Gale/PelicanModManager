@@ -1049,7 +1049,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.mountAction('browse_versions', {projectId: '{$projectId}', title: '{$title}'})\"
+                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
                                 style=\"{$btnBase} border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#c4c4c8;\"
                                 onmouseover=\"this.style.background='rgba(255,255,255,0.1)'\"
                                 onmouseout=\"this.style.background='rgba(255,255,255,0.05)'\">
@@ -1603,12 +1603,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $folder = $type->getFolder();
 
         return [
-            // Hidden page action used by the browse tab's Version Selection button.
-            // Using mountAction() avoids the table record lookup that mountTableAction()
-            // requires, which can fail for API-sourced browse records.
+            // Page action for the browse tab's Version Selection button.
+            // Kept "visible" so Filament allows mounting it, but CSS-hidden from the header.
+            // Triggered programmatically via openBrowseVersions() Livewire method.
             Action::make('browse_versions')
-                ->hidden()
                 ->label(trans('pelican-mod-manager::strings.actions.versions'))
+                ->extraAttributes(['style' => 'display:none !important'])
                 ->modalSubmitAction(false)
                 ->schema(fn (array $arguments) => $this->buildVersionsSections(
                     $arguments['projectId'] ?? '',
@@ -2130,6 +2130,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Called from the browse tab's Version Selection button via Alpine $wire.
+     * Mounts the browse_versions page action server-side so Filament opens the modal.
+     */
+    public function openBrowseVersions(string $projectId, string $title = ''): void
+    {
+        $this->mountAction('browse_versions', ['projectId' => $projectId, 'title' => $title]);
     }
 
     public function installMod(string $projectId, string $slug = '', string $title = '', string $author = ''): void

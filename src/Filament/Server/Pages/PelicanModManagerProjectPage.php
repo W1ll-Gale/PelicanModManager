@@ -962,7 +962,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->wrap()
                     ->formatStateUsing(function ($state, $record) {
                         $title = e($record['title'] ?? $state ?? '');
+                        // JS-safe versions: apostrophes must be backslash-escaped for use inside
+                        // single-quoted JS string literals in x-on:click.stop attributes.
+                        // e() converts ' to &#039; which the browser decodes back to ' before Alpine
+                        // evaluates the expression, still breaking the JS string.
+                        $titleJs  = str_replace("'", "\\'", $record['title'] ?? $state ?? '');
                         $author = e($record['author'] ?? 'Unknown');
+                        $authorJs = str_replace("'", "\\'", $record['author'] ?? 'Unknown');
                         $iconUrl = $record['icon_url'] ?? null;
                         
                         // Safe icon element: use a styled div+SVG placeholder when no icon_url
@@ -1115,7 +1121,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
+                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$titleJs}')\"
                                 style=\"{$btnBase} border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#c4c4c8;\"
                                 onmouseover=\"this.style.background='rgba(255,255,255,0.1)'\"
                                 onmouseout=\"this.style.background='rgba(255,255,255,0.05)'\">
@@ -1147,7 +1153,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } else {
                             $actionBtn = "
                                 <button type='button'
-                                    x-on:click.stop=\"\$wire.installMod('{$projectId}', '{$slug}', '{$title}', '{$author}')\"
+                                    x-on:click.stop=\"\$wire.installMod('{$projectId}', '{$slug}', '{$titleJs}', '{$authorJs}')\"
                                     style=\"{$btnBase} {$actionBtnWidth} border:1px solid #1bd96a; background:transparent; color:#1bd96a;\"
                                     onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
                                     onmouseout=\"this.style.background='transparent'\">
@@ -1253,6 +1259,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->formatStateUsing(function ($state, $record) {
                         $projectId   = e($record['project_id'] ?? '');
                         $title       = e($record['title'] ?? '');
+                        $titleJs     = str_replace("'", "\\'", $record['title'] ?? '');
                         $filename    = e($record['filename'] ?? '');
                         $slug        = e($record['slug'] ?? '');
                         $projectType = e($record['project_type'] ?? 'mod');
@@ -1271,7 +1278,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         if (!$isLocal && $projectId) {
                             $changeVersionBtn = "
                                 <button type='button'
-                                    x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
+                                    x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$titleJs}')\"
                                     title='Change version'
                                     style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
                                     onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
@@ -1303,10 +1310,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         $iconBtnStyle = "background:none; border:none; cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#a1a1aa; border-radius:6px;";
 
-                        // Delete button — triggers Filament's uninstall action (with confirmation modal)
+                        // Delete button — triggers the confirm_uninstall page action (CSS-hidden header action)
+                        // via openConfirmUninstall() Livewire method. mountTableAction() can't find non-DB records
+                        // (Wings API / Modrinth cache), so we use a page action + mountAction() instead.
+                        $isLocalJs = $isLocal ? 'true' : 'false';
                         $deleteBtn = "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.mountTableAction('uninstall', '{$projectId}')\"
+                                x-on:click.stop=\"\$wire.openConfirmUninstall('{$projectId}', '{$filename}', {$isLocalJs}, '{$titleJs}')\"
                                 title='Uninstall'
                                 style='{$iconBtnStyle}'
                                 onmouseover=\"this.style.color='#ef4444'; this.style.background='rgba(239,68,68,0.1)'\"
@@ -1325,10 +1335,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             </button>" : '';
 
                         // Three-dot dropdown
-                        // - position:fixed via getBoundingClientRect() → never clipped by parent overflow
-                        // - $dispatch('pmm-close-dropdowns') → closes every other open dropdown in the page
-                        // - x-on:pmm-close-dropdowns.window → each instance listens and closes itself
-                        // - x-on:click.away → closes when clicking anywhere outside this dropdown
+                        // - x-teleport='body' moves the panel into <body> at the DOM level, escaping
+                        //   the .fi-ta-row:hover { transform: translateY(-1px) } containing block.
+                        //   Without teleport, position:fixed children are positioned relative to the
+                        //   transformed row (not the viewport), causing the panel to flicker in a loop
+                        //   as the row hover toggles the transform on/off.
+                        // - position:fixed + getBoundingClientRect() gives viewport-relative coordinates.
+                        //   Now that the panel is in <body> (no ancestor transform), this works correctly.
+                        // - $dispatch('pmm-close-dropdowns') → closes every other open dropdown on the page.
+                        // - x-on:pmm-close-dropdowns.window → each instance listens and closes itself.
+                        //   Dispatch is synchronous; open=!prev immediately re-opens the target instance.
+                        // - x-on:click.away on the teleported panel → closes on outside clicks that
+                        //   bubble to document (button clicks are stopped before document, handled by dispatch).
                         $dotsDropdown = "
                             <div x-data=\"{ open:false, py:0, px:0 }\"
                                  x-on:pmm-close-dropdowns.window=\"open=false\"
@@ -1350,18 +1368,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                     onmouseout=\"this.style.background='none'; this.style.color='#a1a1aa'\">
                                     {$dotsSvg}
                                 </button>
-                                <div x-show=\"open\" x-cloak
-                                     x-on:click.away=\"open=false\"
-                                     :style=\"'position:fixed;top:'+py+'px;left:'+Math.max(4,px-162)+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:162px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6)'\" >
-                                    <a href=\"{$showFileUrl}\"
-                                       x-on:click.stop=\"open=false\"
-                                       style='display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; text-decoration:none; white-space:nowrap;'
-                                       onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\"
-                                       onmouseout=\"this.style.background='transparent'\">
-                                        {$folderSvg} Show file
-                                    </a>
-                                    {$copyLinkItem}
-                                </div>
+                                <template x-teleport='body'>
+                                    <div x-show=\"open\" x-cloak
+                                         x-on:click.away=\"open=false\"
+                                         :style=\"'position:fixed;top:'+py+'px;left:'+Math.max(4,px-162)+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:162px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6)'\">
+                                        <a href=\"{$showFileUrl}\"
+                                           x-on:click.stop=\"open=false\"
+                                           style='display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; text-decoration:none; white-space:nowrap;'
+                                           onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\"
+                                           onmouseout=\"this.style.background='transparent'\">
+                                            {$folderSvg} Show file
+                                        </a>
+                                        {$copyLinkItem}
+                                    </div>
+                                </template>
                             </div>";
 
                         // Final order: ⇄ change-version | toggle | 🗑 delete | ⋮ three-dot
@@ -1762,6 +1782,69 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $folder = $type->getFolder();
 
         return [
+            // Uninstall confirmation modal — CSS-hidden, triggered via openConfirmUninstall() Livewire method.
+            Action::make('confirm_uninstall')
+                ->extraAttributes(['style' => 'display:none !important'])
+                ->requiresConfirmation()
+                ->modalHeading(fn (array $arguments) => trans('pelican-mod-manager::strings.modals.uninstall_heading'))
+                ->modalDescription(fn (array $arguments) => trans('pelican-mod-manager::strings.modals.uninstall_description', ['name' => $arguments['title'] ?? '']))
+                ->action(function (array $arguments) {
+                    $projectId = $arguments['projectId'] ?? '';
+                    $filename  = $arguments['filename'] ?? '';
+                    $isLocal   = !empty($arguments['isLocal']);
+                    $title     = $arguments['title'] ?? '';
+
+                    try {
+                        /** @var Server $server */
+                        $server = Filament::getTenant();
+                        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+
+                        if (!$isLocal) {
+                            $installedMod = $this->getInstalledMod($projectId);
+                            if ($installedMod) {
+                                $filename = $installedMod['filename'];
+                            }
+                        }
+
+                        $safeFilename = $this->validateFilename($filename);
+
+                        $type = ModrinthProjectType::fromServer($server);
+                        if (!$type) {
+                            throw new Exception('Server does not support Modrinth mods or plugins');
+                        }
+
+                        Http::daemon($server->node)
+                            ->post("/api/servers/{$server->uuid}/files/delete", [
+                                'root' => '/',
+                                'files' => [$type->getFolder() . '/' . $safeFilename],
+                            ])
+                            ->throw();
+
+                        if (!$isLocal) {
+                            PelicanModManager::removeModMetadata($server, $projectId);
+                        }
+
+                        $this->installedModsMetadata = null;
+                        $this->versionsCache = [];
+                        $this->js('$wire.$refresh()');
+
+                        Notification::make()
+                            ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
+                            ->body(trans('pelican-mod-manager::strings.notifications.uninstall_success_body', ['name' => $title]))
+                            ->success()
+                            ->send();
+                    } catch (Exception $exception) {
+                        report($exception);
+                        $this->installedModsMetadata = null;
+                        $this->versionsCache = [];
+                        $this->js('$wire.$refresh()');
+                        Notification::make()
+                            ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
+                            ->body(trans('pelican-mod-manager::strings.notifications.uninstall_failed_body'))
+                            ->danger()
+                            ->send();
+                    }
+                }),
             // Page action for the browse tab's Version Selection button.
             // Kept "visible" so Filament allows mounting it, but CSS-hidden from the header.
             // Triggered programmatically via openBrowseVersions() Livewire method.
@@ -2298,6 +2381,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function openBrowseVersions(string $projectId, string $title = ''): void
     {
         $this->mountAction('browse_versions', ['projectId' => $projectId, 'title' => $title]);
+    }
+
+    /**
+     * Called from the installed tab's trash button via Alpine $wire.
+     * Mounts the confirm_uninstall page action (CSS-hidden in the header) so Filament
+     * opens the confirmation modal. Mirrors the openBrowseVersions pattern — using a
+     * page action avoids the mountTableAction record-fetch issue with non-DB records.
+     */
+    public function openConfirmUninstall(string $projectId, string $filename, bool $isLocal, string $title): void
+    {
+        $this->mountAction('confirm_uninstall', compact('projectId', 'filename', 'isLocal', 'title'));
     }
 
     public function copyModLink(string $slug, string $projectType = 'mod'): void

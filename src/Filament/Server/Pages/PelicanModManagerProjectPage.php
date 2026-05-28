@@ -923,10 +923,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $modrinthUrl = "https://modrinth.com/{$projectType}/{$slug}";
                         $isUnavailable = !empty($record['unavailable']);
 
-                        // Shared button base style
-                        $btnBase = "display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; box-sizing:border-box; transition:background 0.15s ease, border-color 0.15s ease;";
+                        // Shared button base — height locked via line-height so both buttons are identical height
+                        $btnBase = "display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:9px 16px; border-radius:8px; font-size:14px; font-weight:600; line-height:1.25; cursor:pointer; white-space:nowrap; box-sizing:border-box; transition:background 0.15s ease, border-color 0.15s ease;";
+                        // Install/Installed share a fixed width so they're always the same size
+                        $actionBtnWidth = "min-width:120px;";
+                        // Both icon SVGs use the same explicit green stroke so colour is identical
+                        $greenIconColor = "#1bd96a";
 
-                        // Versions button — triggers Filament action modal via mountTableAction
+                        // Versions button
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
                             <button type='button' wire:click.stop=\"mountTableAction('versions', '{$projectId}')\"
@@ -936,19 +940,23 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 {$versionsIconSvg} Version Selection
                             </button>";
 
-                        // Install / Installed / Update button
+                        // Install / Installed / Update — fixed-width, consistent green icon
+                        $checkSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='{$greenIconColor}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'></polyline></svg>";
+                        $plusSvg  = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='{$greenIconColor}' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'></line><line x1='5' y1='12' x2='19' y2='12'></line></svg>";
+
                         if ($isUnavailable) {
                             $actionBtn = "";
                         } elseif ($installedMod && !$hasUpdate) {
+                            // Muted green border+text, but icon keeps the full green
                             $actionBtn = "
-                                <div style=\"{$btnBase} border:1px solid #1bd96a; background:transparent; color:#1bd96a; cursor:default;\">
-                                    <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'></polyline></svg>
+                                <div style=\"{$btnBase} {$actionBtnWidth} border:1px solid rgba(27,217,106,0.4); background:transparent; color:rgba(27,217,106,0.55); cursor:default;\">
+                                    {$checkSvg}
                                     Installed
                                 </div>";
                         } elseif ($installedMod && $hasUpdate) {
                             $actionBtn = "
                                 <button type='button' wire:click.stop=\"updateMod('{$projectId}')\"
-                                    style=\"{$btnBase} border:1px solid #f59e0b; background:transparent; color:#f59e0b;\"
+                                    style=\"{$btnBase} {$actionBtnWidth} border:1px solid #f59e0b; background:transparent; color:#f59e0b;\"
                                     onmouseover=\"this.style.background='rgba(245,158,11,0.1)'\"
                                     onmouseout=\"this.style.background='transparent'\">
                                     <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'></polyline><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path></svg>
@@ -957,27 +965,30 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } else {
                             $actionBtn = "
                                 <button type='button' wire:click.stop=\"installMod('{$projectId}')\"
-                                    style=\"{$btnBase} border:1px solid #1bd96a; background:transparent; color:#1bd96a;\"
+                                    style=\"{$btnBase} {$actionBtnWidth} border:1px solid #1bd96a; background:transparent; color:#1bd96a;\"
                                     onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
                                     onmouseout=\"this.style.background='transparent'\">
-                                    <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><line x1='12' y1='5' x2='12' y2='19'></line><line x1='5' y1='12' x2='19' y2='12'></line></svg>
+                                    {$plusSvg}
                                     Install
                                 </button>";
                         }
 
-                        // Stats row — larger, right-aligned
+                        // Stats — larger text, stacked two rows, right-aligned to match Install button's right edge
+                        $statIcon = "width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'";
                         $statsHtml = "
-                            <div style='display:flex; align-items:center; gap:16px; color:#a1a1aa; font-size:13px; font-weight:500; flex-wrap:wrap;'>
-                                <div style='display:flex; align-items:center; gap:5px;' title='{$downloadsFormattedFull}'>
-                                    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
-                                    <span>{$downloadsFormatted}</span>
-                                </div>
-                                <div style='display:flex; align-items:center; gap:5px;' title='{$followsFormattedFull}'>
-                                    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
-                                    <span>{$followsFormatted}</span>
+                            <div style='display:flex; flex-direction:column; align-items:flex-end; gap:5px; color:#a1a1aa; font-size:15px; font-weight:500;'>
+                                <div style='display:flex; align-items:center; gap:14px;'>
+                                    <div style='display:flex; align-items:center; gap:5px;' title='{$downloadsFormattedFull}'>
+                                        <svg xmlns=\"http://www.w3.org/2000/svg\" {$statIcon}><path d=\"M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2\"></path><polyline points=\"7 11 12 16 17 11\"></polyline><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"4\"></line></svg>
+                                        <span>{$downloadsFormatted}</span>
+                                    </div>
+                                    <div style='display:flex; align-items:center; gap:5px;' title='{$followsFormattedFull}'>
+                                        <svg xmlns=\"http://www.w3.org/2000/svg\" {$statIcon}><path d=\"M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z\"></path></svg>
+                                        <span>{$followsFormatted}</span>
+                                    </div>
                                 </div>
                                 <div style='display:flex; align-items:center; gap:5px;' title='{$dateTooltip}'>
-                                    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
+                                    <svg xmlns=\"http://www.w3.org/2000/svg\" {$statIcon}><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><polyline points=\"12 6 12 12 16 14\"></polyline></svg>
                                     <span>{$dateFormatted}</span>
                                 </div>
                             </div>
@@ -992,14 +1003,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ? "<span style='{$titleLinkStyle}'>{$title}</span>"
                             : "<a href='{$modrinthUrl}' target='_blank' style='{$titleLinkStyle}' onmouseover=\"this.style.color='#1bd96a'\" onmouseout=\"this.style.color='#ffffff'\">{$title}</a>";
 
-                        // Right panel — buttons on top, stats pushed to bottom aligned with tags
+                        // Right panel — buttons on top, stats pushed to bottom and right-aligned
+                        // align-items:flex-end on the column makes the stats right-edge match the Install button right-edge
                         $rightPanel = "
-                            <div style='flex-shrink:0; display:flex; flex-direction:column; justify-content:space-between; padding-left:20px; min-width:0;'>
+                            <div style='flex-shrink:0; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-end; padding-left:20px;'>
                                 <div style='display:flex; gap:8px; align-items:center; flex-wrap:nowrap;'>
                                     {$versionsBtn}
                                     {$actionBtn}
                                 </div>
-                                <div style='padding-top:12px;'>
+                                <div style='padding-top:14px;'>
                                     {$statsHtml}
                                 </div>
                             </div>

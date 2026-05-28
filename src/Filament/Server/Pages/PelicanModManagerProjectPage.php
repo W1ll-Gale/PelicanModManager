@@ -275,18 +275,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     justify-content: center !important;
                 }
 
-                /* Mod — takes all remaining space */
+                /* Mod — left section, takes equal share of remaining space */
                 .fi-ta-row > td:nth-child(2) {
-                    flex: 1 !important;
+                    flex: 1 1 0 !important;
                     min-width: 0 !important;
                     align-self: center !important;
                 }
 
-                /* Version + filename — fixed width */
+                /* Version + filename — fixed-width middle section */
                 .fi-ta-row > td:nth-child(3) {
-                    flex-shrink: 0 !important;
-                    width: 260px !important;
-                    margin-left: 28px !important;
+                    flex: 0 0 220px !important;
+                    width: 220px !important;
+                    margin-left: 20px !important;
+                    margin-right: 20px !important;
                     align-self: center !important;
                 }
 
@@ -295,14 +296,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: flex !important;
                     flex-shrink: 0 !important;
                     align-items: center !important;
-                    margin-left: 12px !important;
-                    margin-right: 4px !important;
+                    gap: 6px !important;
                 }
 
-                /* Delete + three-dot — right-aligned */
+                /* Delete + three-dot — right section, equal share of remaining space, flush right */
                 .fi-ta-row > td:last-child {
                     display: flex !important;
-                    flex-shrink: 0 !important;
+                    flex: 1 1 0 !important;
                     flex-direction: row !important;
                     align-items: center !important;
                     gap: 4px !important;
@@ -471,6 +471,37 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }
 
+                    // Fetch team members to get real author usernames + avatars
+                    // (the /v2/projects bulk endpoint does not return author info)
+                    $teamIds = collect($modrinthMap)->pluck('team')->filter()->unique()->values()->toArray();
+                    $teamAuthorMap = [];
+                    if (!empty($teamIds)) {
+                        try {
+                            $teamsResp = Http::asJson()
+                                ->timeout(10)
+                                ->connectTimeout(5)
+                                ->get('https://api.modrinth.com/v2/teams', [
+                                    'ids' => json_encode($teamIds),
+                                ])
+                                ->json();
+                            if (is_array($teamsResp)) {
+                                foreach ($teamsResp as $members) {
+                                    if (empty($members) || !is_array($members)) continue;
+                                    $teamId = $members[0]['team_id'] ?? null;
+                                    if (!$teamId) continue;
+                                    // Owner role or first member
+                                    $owner = collect($members)->firstWhere('role', 'Owner') ?? $members[0];
+                                    $teamAuthorMap[$teamId] = [
+                                        'username'   => $owner['user']['username'] ?? null,
+                                        'avatar_url' => $owner['user']['avatar_url'] ?? null,
+                                    ];
+                                }
+                            }
+                        } catch (Exception $e) {
+                            report($e);
+                        }
+                    }
+
                     foreach ($registeredMods as $item) {
                         $projectId = $item['project_id'];
                         $mod = $item['metadata'];
@@ -480,7 +511,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if (isset($project['updated']) && !isset($project['date_modified'])) {
                                 $project['date_modified'] = $project['updated'];
                             }
-                            if (isset($mod['author']) && !isset($project['author'])) {
+                            // Prefer team-sourced author (most reliable), fall back to metadata
+                            $teamId = $project['team'] ?? null;
+                            if ($teamId && isset($teamAuthorMap[$teamId])) {
+                                $project['author'] = $teamAuthorMap[$teamId]['username'] ?? ($mod['author'] ?? '');
+                                $project['author_avatar'] = $teamAuthorMap[$teamId]['avatar_url'] ?? null;
+                            } elseif (isset($mod['author']) && !isset($project['author'])) {
                                 $project['author'] = $mod['author'];
                             }
                             $project['filename'] = $item['filename'];
@@ -954,11 +990,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             // Author row: hidden only for local jars
                             if (!$isLocal) {
+                                $authorAvatar = $record['author_avatar'] ?? null;
                                 if ($author !== 'Unknown' && $author !== '') {
-                                    $avatarUrl = "https://api.modrinth.com/v2/user/" . urlencode($author) . "/avatar";
                                     $authorUrl = "https://modrinth.com/user/" . urlencode($author);
+                                    $avatarEl = $authorAvatar
+                                        ? "<img src=\"" . e($authorAvatar) . "\" style='width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);flex-shrink:0;' />"
+                                        : "<div style='width:16px;height:16px;border-radius:50%;background:#3d4451;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#a1a1aa;'>" . strtoupper(mb_substr($author, 0, 1)) . "</div>";
                                     $authorHtml = "<div style='display:flex;align-items:center;gap:6px;'>"
-                                        . "<img src=\"{$avatarUrl}\" style='width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);' />"
+                                        . $avatarEl
                                         . "<a href=\"{$authorUrl}\" target='_blank' style='font-size:12px;color:#a1a1aa;text-decoration:none;' "
                                         . "onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">"
                                         . "{$author} <svg style='display:inline-block;width:10px;height:10px;margin-left:1px;vertical-align:baseline;' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/><polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg>"
@@ -1196,11 +1235,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         $title = e($record['title'] ?? '');
 
-                        // Version number links to Modrinth version page (no underline)
+                        // Version number links to Modrinth version page; underline appears on hover
                         if (!$isLocal && $slug && $version !== 'Unknown') {
                             $versionEncoded = rawurlencode($version);
                             $versionUrl = "https://modrinth.com/{$projectType}/{$slug}/version/{$versionEncoded}";
-                            $versionHtml = "<a href=\"{$versionUrl}\" target='_blank' style='font-size:14px; font-weight:700; color:#f3f4f6; text-decoration:none;'>{$version}</a>";
+                            $versionHtml = "<a href=\"{$versionUrl}\" target='_blank' style='font-size:14px; font-weight:700; color:#f3f4f6; text-decoration:none;' onmouseover=\"this.style.textDecoration='underline'\" onmouseout=\"this.style.textDecoration='none'\">{$version}</a>";
                         } else {
                             $versionHtml = "<span style='font-size:14px; font-weight:700; color:#f3f4f6;'>{$version}</span>";
                         }

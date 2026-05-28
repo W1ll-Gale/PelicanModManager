@@ -930,10 +930,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         // Both icon SVGs use the same explicit green stroke so colour is identical
                         $greenIconColor = "#1bd96a";
 
-                        // Versions button
+                        // Versions button — use Alpine $wire so Livewire 3 processes it correctly
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
-                            <button type='button' wire:click.stop=\"mountTableAction('versions', '{$projectId}')\"
+                            <button type='button'
+                                x-on:click.stop=\"\$wire.mountTableAction('versions', '{$projectId}')\"
                                 style=\"{$btnBase} border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#c4c4c8;\"
                                 onmouseover=\"this.style.background='rgba(255,255,255,0.1)'\"
                                 onmouseout=\"this.style.background='rgba(255,255,255,0.05)'\">
@@ -964,7 +965,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 </button>";
                         } else {
                             $actionBtn = "
-                                <button type='button' wire:click.stop=\"installMod('{$projectId}')\"
+                                <button type='button'
+                                    x-on:click.stop=\"\$wire.installMod('{$projectId}', '{$slug}', '{$title}', '{$author}')\"
                                     style=\"{$btnBase} {$actionBtnWidth} border:1px solid #1bd96a; background:transparent; color:#1bd96a;\"
                                     onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
                                     onmouseout=\"this.style.background='transparent'\">
@@ -2112,7 +2114,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         }
     }
 
-    public function installMod(string $projectId): void
+    public function installMod(string $projectId, string $slug = '', string $title = '', string $author = ''): void
     {
         try {
             /** @var Server $server */
@@ -2131,8 +2133,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 throw new Exception('No downloadable file found');
             }
 
-            // Build a minimal record array from cached metadata
-            $record = ['project_id' => $projectId, 'title' => $latestVersion['name'] ?? $projectId];
+            $record = [
+                'project_id' => $projectId,
+                'slug'       => $slug ?: $projectId,
+                'title'      => $title ?: ($latestVersion['name'] ?? $projectId),
+                'author'     => $author ?: null,
+            ];
             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile);
 
             $this->installedModsMetadata = null;
@@ -2184,7 +2190,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 throw new Exception('No downloadable file found');
             }
 
-            $record = ['project_id' => $projectId, 'title' => $installedMod['project_title'] ?? $projectId];
+            $record = [
+                'project_id' => $projectId,
+                'slug'       => $installedMod['project_slug'] ?? $projectId,
+                'title'      => $installedMod['project_title'] ?? $projectId,
+                'author'     => $installedMod['author'] ?? null,
+            ];
             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile, $installedMod);
 
             $this->installedModsMetadata = null;

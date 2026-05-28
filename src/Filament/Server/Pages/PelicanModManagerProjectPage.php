@@ -275,38 +275,39 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     justify-content: center !important;
                 }
 
-                /* Mod — left section, takes equal share of remaining space */
+                /* Mod — takes all remaining space */
                 .fi-ta-row > td:nth-child(2) {
-                    flex: 1 1 0 !important;
+                    flex: 1 !important;
                     min-width: 0 !important;
                     align-self: center !important;
                 }
 
-                /* Version + filename — fixed-width middle section */
+                /* Version + filename — fixed width, sits after the Mod column */
                 .fi-ta-row > td:nth-child(3) {
                     flex: 0 0 220px !important;
                     width: 220px !important;
-                    margin-left: 20px !important;
-                    margin-right: 20px !important;
+                    margin-left: 24px !important;
                     align-self: center !important;
                 }
 
-                /* Change-version button + toggle switch */
+                /* Change-version + toggle — pushed to far right via margin-left:auto, grouped with Delete */
                 .fi-ta-row > td:nth-child(4) {
                     display: flex !important;
                     flex-shrink: 0 !important;
                     align-items: center !important;
                     gap: 6px !important;
+                    margin-left: auto !important;
+                    padding-left: 16px !important;
                 }
 
-                /* Delete + three-dot — right section, equal share of remaining space, flush right */
+                /* Delete + three-dot — immediately follows toggle group */
                 .fi-ta-row > td:last-child {
                     display: flex !important;
-                    flex: 1 1 0 !important;
+                    flex-shrink: 0 !important;
                     flex-direction: row !important;
                     align-items: center !important;
                     gap: 4px !important;
-                    justify-content: flex-end !important;
+                    padding-left: 4px !important;
                 }
 
                 /* Disabled-row grayscale */

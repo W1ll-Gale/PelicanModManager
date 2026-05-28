@@ -295,32 +295,21 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             CSS;
         } else {
             // Browse Mods tab ('all')
-            // td[1]=checkbox, td[2]=title, td[3]=downloads, td[4]=date_modified, td[last]=actions
+            // NO checkbox td in browse mode — confirmed from HTML source.
+            // td[1]=title, td[2]=downloads, td[3]=date_modified, td[last/4]=actions
             $tabCss = <<<CSS
                 /* --- BROWSE TAB CELLS --- */
 
-                /* Checkbox — collapse it, no bulk actions in browse mode */
+                /* Title — td[1] takes all space, top-aligned */
                 .fi-ta-row > td:first-child {
-                    width: 0 !important;
-                    max-width: 0 !important;
-                    overflow: hidden !important;
-                    opacity: 0 !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                    flex-shrink: 0 !important;
-                    min-width: 0 !important;
-                }
-
-                /* Title — takes all remaining space, top-aligned */
-                .fi-ta-row > td:nth-child(2) {
                     flex: 1 !important;
                     min-width: 0 !important;
                     align-self: flex-start !important;
                 }
 
                 /* Downloads and date_modified — hidden (data embedded in title HtmlString) */
-                .fi-ta-row > td:nth-child(3),
-                .fi-ta-row > td:nth-child(4) {
+                .fi-ta-row > td:nth-child(2),
+                .fi-ta-row > td:nth-child(3) {
                     display: none !important;
                 }
 

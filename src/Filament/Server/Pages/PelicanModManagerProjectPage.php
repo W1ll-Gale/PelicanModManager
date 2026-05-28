@@ -1257,21 +1257,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->label('')
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->formatStateUsing(function ($state, $record) {
-                        $projectId = e($record['project_id'] ?? '');
-                        $title     = e($record['title'] ?? '');
-                        $filename  = e($record['filename'] ?? '');
-                        $isLocal   = !empty($record['is_local']);
-                        $isEnabled = empty($record['is_disabled']);
+                        $projectId   = e($record['project_id'] ?? '');
+                        $title       = e($record['title'] ?? '');
+                        $filename    = e($record['filename'] ?? '');
+                        $slug        = e($record['slug'] ?? '');
+                        $projectType = e($record['project_type'] ?? 'mod');
+                        $isLocal     = !empty($record['is_local']);
+                        $isEnabled   = empty($record['is_disabled']);
                         $isEnabledJs = $isEnabled ? 'true' : 'false';
 
-                        // Change-version button (hidden for local mods with no projectId)
+                        // Resolve "Show file" URL for this server's mod folder
+                        /** @var Server $server */
+                        $server = Filament::getTenant();
+                        $modType = ModrinthProjectType::fromServer($server);
+                        $showFileUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
+
+                        // Change-version button (hidden for local mods)
                         $changeVersionBtn = '';
                         if (!$isLocal && $projectId) {
                             $changeVersionBtn = "
                                 <button type='button'
                                     x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$title}')\"
                                     title='Change version'
-                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px; transition:color 0.15s, background 0.15s;'
+                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
                                     onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
                                     onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
                                     <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
@@ -1293,10 +1301,50 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
                             </div>";
 
+                        // Three-dot Alpine.js dropdown
+                        $folderSvg = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0;'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
+                        $linkSvg   = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' style='flex-shrink:0;'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>";
+
+                        $copyLinkItem = (!$isLocal && $slug) ? "
+                            <button type='button'
+                                x-on:click.stop=\"\$wire.copyModLink('{$slug}', '{$projectType}'); open=false\"
+                                style='display:flex; align-items:center; gap:10px; width:100%; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; background:transparent; border:none; cursor:pointer; white-space:nowrap;'
+                                onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\"
+                                onmouseout=\"this.style.background='transparent'\">
+                                {$linkSvg} Copy link
+                            </button>" : '';
+
+                        $dotsBtnStyle = "background:none; border:none; cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#a1a1aa; border-radius:6px;";
+                        $dotsSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='5' r='1'/><circle cx='12' cy='12' r='1'/><circle cx='12' cy='19' r='1'/></svg>";
+
+                        $dotsDropdown = "
+                            <div x-data=\"{ open: false }\" style='position:relative; display:inline-flex;'>
+                                <button type='button'
+                                    x-on:click.stop=\"open = !open\"
+                                    style='{$dotsBtnStyle}'
+                                    onmouseover=\"this.style.background='rgba(255,255,255,0.08)'; this.style.color='#ffffff'\"
+                                    onmouseout=\"this.style.background='none'; this.style.color='#a1a1aa'\">
+                                    {$dotsSvg}
+                                </button>
+                                <div x-show=\"open\" x-cloak
+                                     x-on:click.away=\"open = false\"
+                                     style='position:absolute; right:0; top:calc(100% + 6px); background:#18181b; border:1px solid #3f3f46; border-radius:10px; padding:4px; min-width:155px; z-index:9999; box-shadow:0 12px 32px rgba(0,0,0,0.55);'>
+                                    <a href=\"{$showFileUrl}\"
+                                       x-on:click.stop
+                                       style='display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:500; color:#e4e4e7; text-decoration:none; white-space:nowrap;'
+                                       onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\"
+                                       onmouseout=\"this.style.background='transparent'\">
+                                        {$folderSvg} Show file
+                                    </a>
+                                    {$copyLinkItem}
+                                </div>
+                            </div>";
+
                         return new HtmlString("
-                            <div style='display:flex; align-items:center; gap:10px;'>
+                            <div style='display:flex; align-items:center; gap:6px;'>
                                 {$changeVersionBtn}
                                 {$toggleHtml}
+                                {$dotsDropdown}
                             </div>
                         ");
                     }),
@@ -1587,30 +1635,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 ->send();
                         }
                     }),
-                // Three-dot dropdown: Show file + Copy link
-                \Filament\Actions\ActionGroup::make([
-                    Action::make('show_file')
-                        ->icon('tabler-folder-open')
-                        ->label('Show file')
-                        ->url(function (array $record) {
-                            /** @var Server $server */
-                            $server = Filament::getTenant();
-                            $type = ModrinthProjectType::fromServer($server);
-                            if (!$type) return '#';
-                            return ListFiles::getUrl(['path' => $type->getFolder()]);
-                        }),
-                    Action::make('copy_link')
-                        ->icon('tabler-link')
-                        ->label('Copy link')
-                        ->visible(fn (array $record) => empty($record['is_local']))
-                        ->action(function (array $record) {
-                            $slug = e($record['slug'] ?? $record['project_slug'] ?? '');
-                            $this->js("navigator.clipboard.writeText('https://modrinth.com/mod/{$slug}')");
-                            Notification::make()->title('Link copied!')->success()->send();
-                        }),
-                ])
-                ->icon('tabler-dots-vertical')
-                ->visible(fn () => $this->activeTab === 'installed'),
             ])
             ->filters([
                 \Filament\Tables\Filters\SelectFilter::make('status')
@@ -2246,6 +2270,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function openBrowseVersions(string $projectId, string $title = ''): void
     {
         $this->mountAction('browse_versions', ['projectId' => $projectId, 'title' => $title]);
+    }
+
+    public function copyModLink(string $slug, string $projectType = 'mod'): void
+    {
+        if (empty($slug)) return;
+        $url = addslashes('https://modrinth.com/' . $projectType . '/' . $slug);
+        $this->js("navigator.clipboard.writeText('{$url}')");
+        Notification::make()->title('Link copied!')->success()->send();
     }
 
     public function installMod(string $projectId, string $slug = '', string $title = '', string $author = ''): void

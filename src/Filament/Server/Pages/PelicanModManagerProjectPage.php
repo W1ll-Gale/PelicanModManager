@@ -154,7 +154,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             .fi-ta-row:hover {
                 border-color: #4b4f56 !important;
                 background-color: #202024 !important;
-                transform: translateY(-1px);
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
             }
 
@@ -961,14 +960,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->sortable()
                     ->wrap()
                     ->formatStateUsing(function ($state, $record) {
-                        $title = e($record['title'] ?? $state ?? '');
-                        // JS-safe versions: apostrophes must be backslash-escaped for use inside
-                        // single-quoted JS string literals in x-on:click.stop attributes.
-                        // e() converts ' to &#039; which the browser decodes back to ' before Alpine
-                        // evaluates the expression, still breaking the JS string.
-                        $titleJs  = str_replace("'", "\\'", $record['title'] ?? $state ?? '');
+                        $title  = e($record['title'] ?? $state ?? '');
                         $author = e($record['author'] ?? 'Unknown');
-                        $authorJs = str_replace("'", "\\'", $record['author'] ?? 'Unknown');
                         $iconUrl = $record['icon_url'] ?? null;
                         
                         // Safe icon element: use a styled div+SVG placeholder when no icon_url
@@ -1121,7 +1114,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $versionsIconSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'></line><line x1='8' y1='12' x2='21' y2='12'></line><line x1='8' y1='18' x2='21' y2='18'></line><line x1='3' y1='6' x2='3.01' y2='6'></line><line x1='3' y1='12' x2='3.01' y2='12'></line><line x1='3' y1='18' x2='3.01' y2='18'></line></svg>";
                         $versionsBtn = $isUnavailable ? "" : "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$titleJs}')\"
+                                data-pmm-project-id=\"{$projectId}\"
+                                data-pmm-title=\"{$title}\"
+                                x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
                                 style=\"{$btnBase} border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#c4c4c8;\"
                                 onmouseover=\"this.style.background='rgba(255,255,255,0.1)'\"
                                 onmouseout=\"this.style.background='rgba(255,255,255,0.05)'\">
@@ -1153,7 +1148,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } else {
                             $actionBtn = "
                                 <button type='button'
-                                    x-on:click.stop=\"\$wire.installMod('{$projectId}', '{$slug}', '{$titleJs}', '{$authorJs}')\"
+                                    data-pmm-project-id=\"{$projectId}\"
+                                    data-pmm-slug=\"{$slug}\"
+                                    data-pmm-title=\"{$title}\"
+                                    data-pmm-author=\"{$author}\"
+                                    x-on:click.stop=\"\$wire.installMod(\$el.dataset.pmmProjectId, \$el.dataset.pmmSlug, \$el.dataset.pmmTitle, \$el.dataset.pmmAuthor)\"
                                     style=\"{$btnBase} {$actionBtnWidth} border:1px solid #1bd96a; background:transparent; color:#1bd96a;\"
                                     onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
                                     onmouseout=\"this.style.background='transparent'\">
@@ -1258,9 +1257,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->formatStateUsing(function ($state, $record) {
                         $projectId   = e($record['project_id'] ?? '');
-                        $title       = e($record['title'] ?? '');
-                        $titleJs     = str_replace("'", "\\'", $record['title'] ?? '');
-                        $filename    = e($record['filename'] ?? '');
+                        $title    = e($record['title'] ?? '');
+                        $filename = e($record['filename'] ?? '');
                         $slug        = e($record['slug'] ?? '');
                         $projectType = e($record['project_type'] ?? 'mod');
                         $isLocal     = !empty($record['is_local']);
@@ -1278,7 +1276,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         if (!$isLocal && $projectId) {
                             $changeVersionBtn = "
                                 <button type='button'
-                                    x-on:click.stop=\"\$wire.openBrowseVersions('{$projectId}', '{$titleJs}')\"
+                                    data-pmm-project-id=\"{$projectId}\"
+                                    data-pmm-title=\"{$title}\"
+                                    x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
                                     title='Change version'
                                     style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
                                     onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
@@ -1316,7 +1316,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $isLocalJs = $isLocal ? 'true' : 'false';
                         $deleteBtn = "
                             <button type='button'
-                                x-on:click.stop=\"\$wire.openConfirmUninstall('{$projectId}', '{$filename}', {$isLocalJs}, '{$titleJs}')\"
+                                data-pmm-project-id=\"{$projectId}\"
+                                data-pmm-filename=\"{$filename}\"
+                                data-pmm-is-local=\"{$isLocalJs}\"
+                                data-pmm-title=\"{$title}\"
+                                x-on:click.stop=\"\$wire.openConfirmUninstall(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, \$el.dataset.pmmIsLocal === 'true', \$el.dataset.pmmTitle)\"
                                 title='Uninstall'
                                 style='{$iconBtnStyle}'
                                 onmouseover=\"this.style.color='#ef4444'; this.style.background='rgba(239,68,68,0.1)'\"

@@ -60,6 +60,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public bool $installedHasDisabled = false;
     public bool $installedHasUpdates = false;
     public bool $installedUpdatesChecked = false;
+    // Set to false initially so the installed tab renders an instant loading
+    // skeleton; loadInstalledData() sets it true in a second Livewire request,
+    // which is when the actual Wings + Modrinth API calls happen.
+    public bool $installedDataReady = false;
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
@@ -193,6 +197,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             .fi-in-text:has(.modrinth-custom-styles),
             .fi-in-entry-wrp:has(.modrinth-custom-styles) {
                 display: none !important;
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+            }
+
+            /* Strip Filament wrapper styling from loading indicator TextEntry */
+            div:has(> .pmm-loading-indicator),
+            .fi-in-text:has(.pmm-loading-indicator),
+            .fi-in-entry-wrp:has(.pmm-loading-indicator) {
                 border: none !important;
                 background: transparent !important;
                 padding: 0 !important;
@@ -452,7 +466,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     {
         $cacheKey = "modrinth_installed_resolved_list_" . $server->uuid;
         
-        return cache()->remember($cacheKey, now()->addSeconds(30), function () use ($server, $type) {
+        return cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
             $fileRepository = app(DaemonFileRepository::class);
             $installedModsMetadata = $this->getInstalledModsMetadata();
 
@@ -958,6 +972,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     $type = ModrinthProjectType::fromServer($server);
                     if (!$type) {
                         return new LengthAwarePaginator([], 0, 20, $page);
+                    }
+
+                    // Return empty immediately on first render — the loading TextEntry's
+                    // x-init fires loadInstalledData() after the page displays, which sets
+                    // installedDataReady=true and triggers the actual (potentially slow) fetch.
+                    if (!$this->installedDataReady) {
+                        return new LengthAwarePaginator([], 0, 1, 1);
                     }
 
                     $combinedItems = $this->getInstalledModsResolvedList($server, $type);
@@ -2781,9 +2802,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->badge(),
                     ]),
                 $this->getTabsContentComponent(),
+                // Loading skeleton — visible only until the second Livewire request
+                // populates the data (loadInstalledData sets installedDataReady=true).
+                TextEntry::make('installed_loading')
+                    ->hiddenLabel()
+                    ->hidden(fn () => $this->activeTab !== 'installed' || $this->installedDataReady)
+                    ->state(fn () => new HtmlString(
+                        "<div class='pmm-loading-indicator' x-data x-init=\"\$wire.call('loadInstalledData')\" "
+                        . "style='display:flex;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:#6b7280;font-size:15px;font-weight:500;'>"
+                        . "<style>@keyframes pmm-spin{to{transform:rotate(360deg)}}.pmm-spin{animation:pmm-spin 0.75s linear infinite;transform-origin:center}</style>"
+                        . "<svg class='pmm-spin' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 12a9 9 0 1 1-6.219-8.56'/></svg>"
+                        . "Loading mods…"
+                        . "</div>"
+                    )),
                 TextEntry::make('installed_filter_bar')
                     ->hiddenLabel()
-                    ->hidden(fn () => $this->activeTab !== 'installed')
+                    ->hidden(fn () => $this->activeTab !== 'installed' || !$this->installedDataReady)
                     ->state(fn () => new HtmlString($this->renderInstalledFilterBar())),
                 EmbeddedTable::make(),
             ]);
@@ -2906,13 +2940,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     /**
      * Livewire lifecycle hook — fires when $activeTab changes.
-     * Resets the lazy-check flag so the Updates check re-runs when switching to installed.
      */
     public function updatedActiveTab(): void
     {
         if ($this->activeTab === 'installed') {
+            // Reset the updates-check flag so it re-runs on each visit.
+            // Do NOT reset installedDataReady — if data is cached (5-min TTL)
+            // the second Livewire request will be fast, but we still skip the
+            // loading flicker when switching back within the same session.
             $this->installedUpdatesChecked = false;
         }
+    }
+
+    /**
+     * Triggered by x-init on the loading skeleton after the first (instant) render.
+     * Setting installedDataReady=true causes Livewire to re-render the component,
+     * which is when records() actually calls getInstalledModsResolvedList().
+     * That second request may be slow (cold cache) but the user already sees the
+     * loading spinner, so the UX is non-blocking.
+     */
+    public function loadInstalledData(): void
+    {
+        if ($this->activeTab !== 'installed') return;
+        $this->installedDataReady = true;
     }
 
     /**
@@ -2958,9 +3008,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_has_updates_{$server->uuid}");
         $this->installedHasUpdates = false;
-        $this->installedUpdatesChecked = false; // triggers re-check after render
-        $this->js('$wire.$refresh()');
-        Notification::make()->title('Refreshed')->success()->send();
+        $this->installedUpdatesChecked = false;
+        // Show loading skeleton again so the user sees a fresh load
+        $this->installedDataReady = false;
+        // No explicit refresh needed — unsetting installedDataReady triggers re-render
+        // and the loading skeleton's x-init will fire loadInstalledData() again
+        Notification::make()->title('Refreshing…')->info()->send();
     }
 
     public function updateAllMods(): void

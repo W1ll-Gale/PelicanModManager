@@ -56,16 +56,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     public string $browseSearch = '';
     public string $browseSortMode = 'relevance';
+    public int $browsePageSize = 20;
+    public int $browseTotalPages = 0;
+    public int $browseCurrentPage = 1;
     public string $installedStatusFilter = 'all';
     public string $installedSearch = '';
     public string $installedSortMode = 'alpha_asc';
     public bool $installedHasDisabled = false;
     public bool $installedHasUpdates = false;
     public bool $installedUpdatesChecked = false;
-    // Set to false initially so the installed tab renders an instant loading
-    // skeleton; loadInstalledData() sets it true in a second Livewire request,
-    // which is when the actual Wings + Modrinth API calls happen.
+    // Phase 1: basic list from Wings + local metadata (fast — no Modrinth API calls)
     public bool $installedDataReady = false;
+    // Phase 2: Modrinth-enriched list (icons, author avatars) loaded in background
+    public bool $installedEnriched = false;
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
@@ -453,8 +456,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             : trans('pelican-mod-manager::strings.page.browse_mods');
 
         return [
-            'all' => Tab::make($tabLabel),
             'installed' => Tab::make(trans('pelican-mod-manager::strings.page.view_installed')),
+            'all' => Tab::make($tabLabel),
         ];
     }
 
@@ -469,6 +472,68 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         }
 
         return $this->installedModsMetadata;
+    }
+
+    /**
+     * Fast path: Wings file listing + local metadata only — zero Modrinth API calls.
+     * Returns records compatible with getInstalledModsResolvedList() but with
+     * null icon_url / author_avatar (placeholders shown in the UI).
+     * @return array<int, mixed>
+     */
+    protected function getBasicInstalledList(Server $server, ModrinthProjectType $type): array
+    {
+        $cacheKey = "pmm_basic_installed_{$server->uuid}";
+        return cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
+            $fileRepository = app(DaemonFileRepository::class);
+            $metadata = $this->getInstalledModsMetadata();
+
+            try {
+                $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
+                if (isset($files['error'])) throw new Exception($files['error']);
+            } catch (Exception $e) {
+                report($e);
+                $files = [];
+            }
+
+            $records = [];
+            foreach (collect($files)->filter(fn ($f) => str_ends_with(strtolower($f['name']), '.jar') || str_ends_with(strtolower($f['name']), '.jar.disabled')) as $file) {
+                $filename = $file['name'];
+                $isDisabled = str_ends_with(strtolower($filename), '.disabled');
+                $cleanFilename = str_replace('.disabled', '', $filename);
+                $meta = collect($metadata)->first(fn ($m) => strcasecmp(str_replace('.disabled', '', $m['filename']), $cleanFilename) === 0);
+
+                if ($meta) {
+                    $records[] = [
+                        'project_id'    => $meta['project_id'],
+                        'slug'          => $meta['project_slug'],
+                        'title'         => $meta['project_title'],
+                        'filename'      => $filename,
+                        'installed_at'  => $meta['installed_at'],
+                        'author'        => $meta['author'] ?? '',
+                        'author_avatar' => null,
+                        'icon_url'      => null,
+                        'project_type'  => 'mod',
+                        'is_local'      => false,
+                        'is_disabled'   => $isDisabled,
+                        'metadata'      => $meta,
+                    ];
+                } else {
+                    $records[] = [
+                        'project_id'   => 'local_' . md5($filename),
+                        'slug'         => '',
+                        'title'        => basename($cleanFilename, '.jar'),
+                        'filename'     => $filename,
+                        'author'       => '',
+                        'author_avatar'=> null,
+                        'icon_url'     => null,
+                        'project_type' => 'mod',
+                        'is_local'     => true,
+                        'is_disabled'  => $isDisabled,
+                    ];
+                }
+            }
+            return $records;
+        });
     }
 
     /**
@@ -986,14 +1051,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return new LengthAwarePaginator([], 0, 20, $page);
                     }
 
-                    // Return empty immediately on first render — the loading TextEntry's
-                    // x-init fires loadInstalledData() after the page displays, which sets
-                    // installedDataReady=true and triggers the actual (potentially slow) fetch.
+                    // Phase 0: not ready yet — show loading skeleton
                     if (!$this->installedDataReady) {
                         return new LengthAwarePaginator([], 0, 1, 1);
                     }
 
-                    $combinedItems = $this->getInstalledModsResolvedList($server, $type);
+                    // Phase 1: basic list (Wings + metadata, no Modrinth API, ~1s on cold cache)
+                    // Phase 2: Modrinth-enriched list (icons, avatars) after checkInstalledUpdates fires
+                    $combinedItems = $this->installedEnriched
+                        ? $this->getInstalledModsResolvedList($server, $type)
+                        : $this->getBasicInstalledList($server, $type);
 
                     // Compute cheap stats (no API calls)
                     $this->installedHasDisabled = collect($combinedItems)->contains(fn ($i) => !empty($i['is_disabled']));
@@ -1052,20 +1119,21 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     // Return ALL installed items on a single page (pagination disabled for installed tab)
                     return new LengthAwarePaginator($combinedItems, $totalItems, max($totalItems, 1), 1);
                 } else {
-                    // Map browse sort modes to column/direction pairs the API knows
                     $browseSortMap = [
-                        'downloads' => ['downloads', 'desc'],
-                        'follows'   => ['follows',   'desc'],
-                        'newest'    => ['date_modified', 'desc'],
-                        'updated'   => ['date_modified', 'asc'],
+                        'downloads' => ['downloads',    'desc'],
+                        'follows'   => ['follows',      'desc'],
+                        'newest'    => ['date_modified','desc'],
+                        'updated'   => ['date_modified','asc'],
                     ];
                     [$bCol, $bDir] = $browseSortMap[$this->browseSortMode] ?? [null, null];
                     $response = PelicanModManager::getProjects($server, $page, $this->browseSearch, $bCol, $bDir);
-
-                    return new LengthAwarePaginator($response['hits'], $response['total_hits'], 20, $page);
+                    $total = (int)($response['total_hits'] ?? 0);
+                    $this->browseTotalPages = $this->browsePageSize > 0 ? (int)ceil($total / $this->browsePageSize) : 1;
+                    $this->browseCurrentPage = $page;
+                    return new LengthAwarePaginator($response['hits'], $total, $this->browsePageSize, $page);
                 }
             })
-            ->paginated($this->activeTab === 'installed' ? false : [20])
+            ->paginated($this->activeTab === 'installed' ? false : [$this->browsePageSize])
             ->recordClasses(fn (array $record) => !empty($record['is_disabled']) ? 'pmm-row-disabled' : null)
             ->columns([
                 TextColumn::make('title')
@@ -2077,6 +2145,89 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     $type = ModrinthProjectType::fromServer(Filament::getTenant());
                     return $type ? ListFiles::getUrl(['path' => $type->getFolder()]) : '#';
                 }, true),
+            // Export modpack — triggered from the installed filter bar via mountAction('export_modpack').
+            // Hidden from the page header; always mountable.
+            Action::make('export_modpack')
+                ->label('Export modpack')
+                ->extraAttributes(['style' => 'display:none !important'])
+                ->action(function () {
+                    /** @var Server $server */
+                    $server = Filament::getTenant();
+                    $type = ModrinthProjectType::fromServer($server);
+                    if (!$type) return;
+
+                    $folder = $type->getFolder();
+                    $metadata = $this->getInstalledModsMetadata();
+
+                    // Build modrinth.index.json files array
+                    $indexFiles = [];
+                    foreach ($metadata as $mod) {
+                        $versions = $this->getCachedVersions($mod['project_id']);
+                        $ver = collect($versions)->firstWhere('id', $mod['version_id']);
+                        if (!$ver) continue;
+                        $pf = $this->getPrimaryFile($ver['files'] ?? []);
+                        if (!$pf) continue;
+                        $indexFiles[] = [
+                            'path'      => $folder . '/' . ($pf['filename'] ?? basename($pf['url'])),
+                            'hashes'    => $pf['hashes'] ?? [],
+                            'env'       => ['client' => 'optional', 'server' => 'required'],
+                            'downloads' => [$pf['url']],
+                            'fileSize'  => $pf['size'] ?? 0,
+                        ];
+                    }
+
+                    $mcVersion = PelicanModManager::getMinecraftVersion($server) ?? '1.0.0';
+                    $loaderInfo = PelicanModManager::getLoaderFromServer($server);
+                    $loaderKey = strtolower($loaderInfo['name'] ?? 'fabric') . '-loader';
+                    $deps = array_filter(['minecraft' => $mcVersion]);
+
+                    $indexJson = json_encode([
+                        'formatVersion' => 1,
+                        'game'          => 'minecraft',
+                        'versionId'     => '1.0.0',
+                        'name'          => ($server->name ?? 'Server') . ' Modpack',
+                        'summary'       => 'Exported from Pelican Mod Manager',
+                        'files'         => $indexFiles,
+                        'dependencies'  => $deps,
+                    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+                    // Build zip in memory
+                    $tmpPath = sys_get_temp_dir() . '/pmm_export_' . $server->uuid . '_' . time() . '.mrpack';
+                    $zip = new ZipArchive();
+                    if ($zip->open($tmpPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                        Notification::make()->title('Export failed')->body('Could not create archive.')->danger()->send();
+                        return;
+                    }
+                    $zip->addFromString('modrinth.index.json', $indexJson);
+
+                    // Add local (untracked) jar files to overrides/mods/
+                    $managedFiles = collect($metadata)->pluck('filename')
+                        ->map(fn ($f) => strtolower(str_replace('.disabled', '', $f)))->toArray();
+                    try {
+                        $fileRepository = app(DaemonFileRepository::class);
+                        $dirFiles = $fileRepository->setServer($server)->getDirectory($folder);
+                        foreach ($dirFiles as $df) {
+                            $fn = $df['name'];
+                            $clean = strtolower(str_replace('.disabled', '', $fn));
+                            if (in_array($clean, $managedFiles, true)) continue;
+                            if (!str_ends_with($clean, '.jar')) continue;
+                            try {
+                                $content = Http::daemon($server->node)
+                                    ->get("/api/servers/{$server->uuid}/files/contents", ['file' => $folder . '/' . $fn])
+                                    ->body();
+                                if ($content) {
+                                    $zip->addFromString('overrides/' . $folder . '/' . $fn, $content);
+                                }
+                            } catch (Exception $e) { /* skip undownloadable files */ }
+                        }
+                    } catch (Exception $e) { /* skip if listing fails */ }
+
+                    $zip->close();
+
+                    return response()->download($tmpPath, 'modpack.mrpack', [
+                        'Content-Type' => 'application/zip',
+                    ])->deleteFileAfterSend(true);
+                }),
         ];
     }
 
@@ -2863,10 +3014,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $hBtnHov  = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
         $folderSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
         $uploadSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 16 12 12 8 16'/><line x1='12' y1='12' x2='12' y2='21'/><path d='M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3'/></svg>";
+        $exportSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
         $row1 = "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
             . $searchInput
             . "<a href=\"{$folderUrl}\" target='_blank' style=\"{$hBtnBase}\"{$hBtnHov}>{$folderSvg}Open folder</a>"
             . "<button type='button' wire:click=\"mountAction('upload_mod')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$uploadSvg}Upload files</button>"
+            . "<button type='button' wire:click=\"mountAction('export_modpack')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$exportSvg}Export modpack</button>"
             . "</div>";
 
         // ── Row 2: filter icon + chips + sort (left) | Update all + Refresh (right) ──
@@ -2962,18 +3115,27 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         }
     }
 
+    public function setBrowsePageSize(int $size): void
+    {
+        $allowed = [5, 10, 15, 20, 50, 100];
+        if (in_array($size, $allowed, true)) {
+            $this->browsePageSize = $size;
+            $this->gotoPage(1); // reset to page 1 when changing page size
+        }
+    }
+
     protected function renderBrowseFilterBar(): string
     {
-        $sortLabels = [
-            'relevance' => 'Relevance',
-            'downloads' => 'Downloads',
-            'follows'   => 'Follows',
-            'newest'    => 'Newest',
-            'updated'   => 'Last updated',
-        ];
+        $sortLabels = ['relevance' => 'Relevance', 'downloads' => 'Downloads', 'follows' => 'Follows', 'newest' => 'Newest', 'updated' => 'Last updated'];
         $curSortLabel = $sortLabels[$this->browseSortMode] ?? 'Relevance';
+        $chevSvg  = "<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>";
+        $checkSvg = "<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
 
-        // Search bar (full-width)
+        // Shared dropdown button style
+        $ddBtn = "display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.12);color:#a1a1aa;background:rgba(255,255,255,0.04);transition:all 0.15s ease;";
+        $ddBtnHov = "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.12)'\"";
+
+        // ── Search bar ──
         $searchSvg = "<svg style='position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
         $searchBar = "<div style='position:relative;margin-bottom:10px;'>"
             . $searchSvg
@@ -2982,11 +3144,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             . "onfocus=\"this.style.borderColor='rgba(27,217,106,0.4)'\" onblur=\"this.style.borderColor='rgba(255,255,255,0.1)'\"/>"
             . "</div>";
 
-        // Sort dropdown (x-teleport so it appears above the table)
-        $listSvg  = "<svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='8' y1='6' x2='21' y2='6'/><line x1='8' y1='12' x2='21' y2='12'/><line x1='8' y1='18' x2='21' y2='18'/><line x1='3' y1='6' x2='3.01' y2='6'/><line x1='3' y1='12' x2='3.01' y2='12'/><line x1='3' y1='18' x2='3.01' y2='18'/></svg>";
-        $chevSvg  = "<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>";
-        $checkSvg = "<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
-
+        // ── Sort dropdown (x-teleport) ──
         $sortOpts = '';
         foreach ($sortLabels as $k => $lbl) {
             $active = $this->browseSortMode === $k;
@@ -2997,21 +3155,85 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 . "onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\" onmouseout=\"this.style.background='transparent'\">"
                 . $icon . e($lbl) . "</button>";
         }
-
         $sortDropdown = "<div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>"
-            . "<button type='button' x-ref='bsortbtn' "
-            . "x-on:click.stop=\"if(!open){let r=\$refs.bsortbtn.getBoundingClientRect();py=r.bottom+6;px=r.left;} open=!open\" "
-            . "style='display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.12);color:#a1a1aa;background:rgba(255,255,255,0.04);transition:all 0.15s ease;' "
-            . "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.12)'\">"
+            . "<button type='button' x-ref='bsortbtn' x-on:click.stop=\"if(!open){let r=\$refs.bsortbtn.getBoundingClientRect();py=r.bottom+6;px=r.left;} open=!open\" style=\"{$ddBtn}\" {$ddBtnHov}>"
             . "<span style='color:#6b7280;font-weight:400;margin-right:2px;'>Sort by:</span> " . e($curSortLabel) . " " . $chevSvg
             . "</button>"
-            . "<template x-teleport='body'>"
-            . "<div x-show='open' x-cloak x-on:click.away='open=false' "
+            . "<template x-teleport='body'><div x-show='open' x-cloak x-on:click.away='open=false' "
             . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:175px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'\">"
-            . $sortOpts
-            . "</div></template></div>";
+            . $sortOpts . "</div></template></div>";
 
-        $row2 = "<div style='display:flex;align-items:center;gap:8px;'>{$sortDropdown}</div>";
+        // ── View: X dropdown ──
+        $viewOpts = '';
+        foreach ([5, 10, 15, 20, 50, 100] as $sz) {
+            $active = $this->browsePageSize === $sz;
+            $icon   = $active ? $checkSvg : "<span style='width:12px;display:inline-block'></span>";
+            $color  = $active ? '#1bd96a' : '#e4e4e7';
+            $viewOpts .= "<button type='button' wire:click=\"setBrowsePageSize({$sz})\" x-on:click=\"open=false\" "
+                . "style='display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:500;color:{$color};background:transparent;border:none;cursor:pointer;text-align:left;' "
+                . "onmouseover=\"this.style.background='rgba(255,255,255,0.07)'\" onmouseout=\"this.style.background='transparent'\">"
+                . $icon . $sz . "</button>";
+        }
+        $viewDropdown = "<div x-data=\"{ open:false, py:0, px:0 }\" style='display:inline-flex;'>"
+            . "<button type='button' x-ref='bviewbtn' x-on:click.stop=\"if(!open){let r=\$refs.bviewbtn.getBoundingClientRect();py=r.bottom+6;px=r.left;} open=!open\" style=\"{$ddBtn}\" {$ddBtnHov}>"
+            . "<span style='color:#6b7280;font-weight:400;margin-right:2px;'>View:</span> {$this->browsePageSize} " . $chevSvg
+            . "</button>"
+            . "<template x-teleport='body'><div x-show='open' x-cloak x-on:click.away='open=false' "
+            . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;background:#18181b;border:1px solid #3f3f46;border-radius:10px;padding:4px;min-width:100px;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,0.6);'\">"
+            . $viewOpts . "</div></template></div>";
+
+        // ── Top pagination (smaller) ──
+        $topPagination = '';
+        if ($this->browseTotalPages > 1) {
+            $cur   = $this->browseCurrentPage;
+            $total = $this->browseTotalPages;
+
+            $pBtnBase = "display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 6px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid;transition:all 0.15s ease;background:none;";
+            $pBtnOff  = $pBtnBase . "border-color:rgba(255,255,255,0.1);color:#a1a1aa;";
+            $pBtnOn   = $pBtnBase . "border-color:rgba(27,217,106,0.5);color:#1bd96a;background:rgba(27,217,106,0.1);";
+            $pBtnHov  = " onmouseover=\"if(this.dataset.cur!='1'){this.style.background='rgba(255,255,255,0.07)';this.style.borderColor='rgba(255,255,255,0.25)';this.style.color='#ffffff'}\" onmouseout=\"if(this.dataset.cur!='1'){this.style.background='none';this.style.borderColor='rgba(255,255,255,0.1)';this.style.color='#a1a1aa'}\"";
+
+            $renderPage = function (int $n) use ($cur, $pBtnOn, $pBtnOff, $pBtnHov): string {
+                $active = $n === $cur;
+                $style  = $active ? $pBtnOn : $pBtnOff;
+                $data   = $active ? " data-cur='1'" : '';
+                return "<button type='button' wire:click=\"gotoPage({$n})\"{$data} style=\"{$style}\"{$pBtnHov}>{$n}</button>";
+            };
+
+            $pages = [];
+            $window = 2; // pages each side of current
+            for ($i = 1; $i <= $total; $i++) {
+                if ($i === 1 || $i === $total || ($i >= $cur - $window && $i <= $cur + $window)) {
+                    $pages[] = $i;
+                }
+            }
+
+            $ellipsis = "<span style='display:inline-flex;align-items:center;color:#4b5563;font-size:12px;padding:0 4px;'>…</span>";
+            $prevPage = $cur > 1
+                ? "<button type='button' wire:click=\"gotoPage(" . ($cur - 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&lsaquo;</button>"
+                : "<button disabled style=\"{$pBtnOff}opacity:0.3;cursor:default\">&lsaquo;</button>";
+            $nextPage = $cur < $total
+                ? "<button type='button' wire:click=\"gotoPage(" . ($cur + 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&rsaquo;</button>"
+                : "<button disabled style=\"{$pBtnOff}opacity:0.3;cursor:default\">&rsaquo;</button>";
+
+            $paginationHtml = $prevPage;
+            $prev = null;
+            foreach ($pages as $p) {
+                if ($prev !== null && $p - $prev > 1) {
+                    $paginationHtml .= $ellipsis;
+                }
+                $paginationHtml .= $renderPage($p);
+                $prev = $p;
+            }
+            $paginationHtml .= $nextPage;
+
+            $topPagination = "<div style='display:flex;align-items:center;gap:3px;'>{$paginationHtml}</div>";
+        }
+
+        $row2 = "<div style='display:flex;align-items:center;justify-content:space-between;'>"
+            . "<div style='display:flex;align-items:center;gap:8px;'>{$sortDropdown}{$viewDropdown}</div>"
+            . "<div>{$topPagination}</div>"
+            . "</div>";
 
         return "<div class='pmm-browse-bar' style='padding:0 0 8px 0;'>{$searchBar}{$row2}</div>";
     }
@@ -3022,11 +3244,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function updatedActiveTab(): void
     {
         if ($this->activeTab === 'installed') {
-            // Reset the updates-check flag so it re-runs on each visit.
-            // Do NOT reset installedDataReady — if data is cached (5-min TTL)
-            // the second Livewire request will be fast, but we still skip the
-            // loading flicker when switching back within the same session.
             $this->installedUpdatesChecked = false;
+            // Don't reset installedDataReady/installedEnriched — keeps tab
+            // switches fast within the same session once data is loaded.
         }
     }
 
@@ -3055,9 +3275,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $server = Filament::getTenant();
         $cacheKey = "pmm_has_updates_{$server->uuid}";
 
-        $this->installedHasUpdates = cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server) {
-            $type = ModrinthProjectType::fromServer($server);
-            if (!$type) return false;
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) { $this->installedUpdatesChecked = true; return; }
+
+        // This call also warms the full Modrinth-enriched cache (5-min TTL),
+        // so switching installedEnriched=true here gives instant re-renders.
+        $this->installedHasUpdates = cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
             foreach ($this->getInstalledModsResolvedList($server, $type) as $item) {
                 if (!empty($item['is_local'])) continue;
                 $versions = $this->getCachedVersions($item['project_id']);
@@ -3070,6 +3293,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             return false;
         });
 
+        // getInstalledModsResolvedList() is now cached — switch to enriched list
+        $this->installedEnriched = true;
         $this->installedUpdatesChecked = true;
     }
 
@@ -3084,11 +3309,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->installedModsMetadata = null;
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_has_updates_{$server->uuid}");
         $this->installedHasUpdates = false;
         $this->installedUpdatesChecked = false;
-        // Show loading skeleton again so the user sees a fresh load
         $this->installedDataReady = false;
+        $this->installedEnriched = false;
         // No explicit refresh needed — unsetting installedDataReady triggers re-render
         // and the loading skeleton's x-init will fire loadInstalledData() again
         Notification::make()->title('Refreshing…')->info()->send();

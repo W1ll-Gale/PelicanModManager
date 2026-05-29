@@ -475,6 +475,31 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     }
 
     /**
+     * Ultra-fast path: reads only the local metadata file — zero network calls.
+     * Returns records compatible with getInstalledModsResolvedList() but only for
+     * mods that have Modrinth metadata (no local/untracked jars).
+     * Used as the initial phase so the installed tab shows instantly.
+     * @return array<int, mixed>
+     */
+    protected function getMetadataOnlyList(): array
+    {
+        return collect($this->getInstalledModsMetadata())->map(fn ($mod) => [
+            'project_id'    => $mod['project_id'],
+            'slug'          => $mod['project_slug'],
+            'title'         => $mod['project_title'],
+            'filename'      => $mod['filename'],
+            'installed_at'  => $mod['installed_at'],
+            'author'        => $mod['author'] ?? '',
+            'author_avatar' => null,
+            'icon_url'      => null,
+            'project_type'  => 'mod',
+            'is_local'      => false,
+            'is_disabled'   => str_ends_with(strtolower($mod['filename']), '.disabled'),
+            'metadata'      => $mod,
+        ])->toArray();
+    }
+
+    /**
      * Fast path: Wings file listing + local metadata only — zero Modrinth API calls.
      * Returns records compatible with getInstalledModsResolvedList() but with
      * null icon_url / author_avatar (placeholders shown in the UI).
@@ -784,6 +809,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $installedMod = $this->getInstalledMod($projectId);
         $installedVersionId = $installedMod['version_id'] ?? null;
 
+        // Enrich the record with metadata fields that may be missing when called
+        // from the "Change version" modal (which only passes projectId + title).
+        // saveModMetadata() requires slug; without it the save fails and leaves
+        // the newly downloaded jar as an orphaned local file.
+        if ($installedMod) {
+            $record = array_merge([
+                'slug'   => $installedMod['project_slug'] ?? '',
+                'author' => $installedMod['author'] ?? null,
+            ], $record);
+        }
+
         $sections = [];
         foreach ($versions as $versionIndex => $versionData) {
             $primaryFile = $this->getPrimaryFile($versionData['files'] ?? []);
@@ -969,15 +1005,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->pull($primaryFile['url'], $folder)
             ->throw();
 
+        // Slug is required by saveModMetadata. If it's missing from $record
+        // (e.g. called from the version-change modal which only passes projectId+title),
+        // fall back to the installed mod's stored slug.
+        $slug = !empty($record['slug']) ? $record['slug'] : ($installedMod['project_slug'] ?? '');
+
         $saved = PelicanModManager::saveModMetadata(
             $server,
             $record['project_id'],
-            $record['slug'],
+            $slug,
             $record['title'],
             $versionData['id'],
             $versionData['version_number'],
             $safeNewFilename,
-            $record['author'] ?? null
+            $record['author'] ?? ($installedMod['author'] ?? null)
         );
 
         if (!$saved) {
@@ -1051,16 +1092,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return new LengthAwarePaginator([], 0, 20, $page);
                     }
 
-                    // Phase 0: not ready yet — show loading skeleton
+                    // Phase 0: not ready yet — loading skeleton visible
                     if (!$this->installedDataReady) {
                         return new LengthAwarePaginator([], 0, 1, 1);
                     }
 
-                    // Phase 1: basic list (Wings + metadata, no Modrinth API, ~1s on cold cache)
-                    // Phase 2: Modrinth-enriched list (icons, avatars) after checkInstalledUpdates fires
+                    // Phase 1 (instant, ~50ms): metadata-only — shows all tracked mods immediately
+                    //   from the local metadata file, no network calls.
+                    // Phase 2 (async, ~1-5s): Wings + Modrinth enrichment triggered by checkInstalledUpdates.
+                    //   Icons, author avatars, untracked local jars appear once enriched.
                     $combinedItems = $this->installedEnriched
                         ? $this->getInstalledModsResolvedList($server, $type)
-                        : $this->getBasicInstalledList($server, $type);
+                        : $this->getMetadataOnlyList();
 
                     // Compute cheap stats (no API calls)
                     $this->installedHasDisabled = collect($combinedItems)->contains(fn ($i) => !empty($i['is_disabled']));
@@ -1427,7 +1470,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return new HtmlString("
                             <div style='display:flex; flex-direction:column; gap:4px; align-items:flex-start; text-align:left;'>
                                 {$versionHtml}
-                                <span style='font-size:11px; color:#6b7280; font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; display:block;'>{$filename}</span>
+                                <span style='font-size:11px; color:#6b7280; font-family:monospace; word-break:break-all;'>{$filename}</span>
                             </div>
                         ");
                     }),
@@ -3252,15 +3295,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     /**
      * Triggered by x-init on the loading skeleton after the first (instant) render.
-     * Setting installedDataReady=true causes Livewire to re-render the component,
-     * which is when records() actually calls getInstalledModsResolvedList().
-     * That second request may be slow (cold cache) but the user already sees the
-     * loading spinner, so the UX is non-blocking.
+     * Reads only the local metadata file (no network calls) and shows tracked mods
+     * immediately. The filter bar then fires checkInstalledUpdates() async which
+     * enriches with Wings file listing + Modrinth icons/avatars.
      */
     public function loadInstalledData(): void
     {
         if ($this->activeTab !== 'installed') return;
+        // Pre-load metadata into memory (fast, local file read)
+        $this->getInstalledModsMetadata();
         $this->installedDataReady = true;
+        // records() now returns getMetadataOnlyList() — instant, no API calls
     }
 
     /**
@@ -3311,6 +3356,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_has_updates_{$server->uuid}");
+        $this->installedModsMetadata = null; // force metadata re-read too
         $this->installedHasUpdates = false;
         $this->installedUpdatesChecked = false;
         $this->installedDataReady = false;

@@ -1711,6 +1711,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $toggleHtml = "
                             <button type='button'
                                  class='pmm-toggle-switch'
+                                 wire:ignore
                                  x-data=\"{ on: {$isEnabledJs}, busy: false }\"
                                  data-pmm-project-id=\"{$projectId}\"
                                  data-pmm-filename=\"{$filename}\"
@@ -1724,7 +1725,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                     '--pmm-toggle-knob-bg': on ? '#03150A' : '#9aa4b2',
                                     '--pmm-toggle-x': on ? '22px' : '0px'
                                  }\"
-                                 x-on:click.stop=\"if (busy) return; let wasOn=on; on=!on; busy=true; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn).then(() => { busy=false }).catch(() => { on=wasOn; busy=false })\">
+                                 x-on:click.stop=\"if (busy) return; let wasOn=on; let oldFilename=\$el.dataset.pmmFilename; let newFilename=wasOn ? oldFilename + '.disabled' : oldFilename.replace(/\\.disabled$/i, ''); on=!on; busy=true; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, oldFilename, wasOn).then(() => { \$el.dataset.pmmFilename=newFilename; busy=false }).catch(() => { on=wasOn; \$el.dataset.pmmFilename=oldFilename; busy=false })\">
                                 <span class='pmm-toggle-switch__knob'></span>
                             </button>";
 

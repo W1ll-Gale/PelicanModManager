@@ -65,8 +65,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public bool $installedHasDisabled = false;
     public bool $installedHasUpdates = false;
     public bool $installedUpdatesChecked = false;
-    // Phase 1: basic list from Wings + local metadata (fast — no Modrinth API calls)
-    public bool $installedDataReady = false;
+    // Phase 1: local metadata renders immediately; no Wings folder scan or Modrinth call.
+    /** @var array<string, bool> Project IDs known to have updates after the lazy background check. */
+    public array $installedUpdateProjectIds = [];
+    public bool $installedDataReady = true;
     // Phase 2: Modrinth-enriched list (icons, author avatars) loaded in background
     public bool $installedEnriched = false;
 
@@ -112,6 +114,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function mount(): void
     {
         $this->loadDefaultActiveTab();
+
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $cachedUpdateProjectIds = cache()->get("pmm_update_project_ids_{$server->uuid}", []);
+        if (is_array($cachedUpdateProjectIds)) {
+            $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
+            $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+            $this->installedUpdatesChecked = cache()->has("pmm_update_project_ids_{$server->uuid}");
+        }
     }
 
     public function getTableRecordKey(mixed $record): string
@@ -232,7 +243,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                ALL tabs — both tabs use their own custom search bars. */
             .fi-ta-header,
             .fi-ta-header-toolbar,
-            .fi-ta-search {
+            .fi-ta-search,
+            .fi-ta-column-toggle,
+            .fi-ta-column-manager,
+            .fi-ta-col-manager,
+            .fi-ta-toggle-columns,
+            .fi-ta-table-column-toggle,
+            button[aria-label*="column" i],
+            button[title*="column" i] {
                 display: none !important;
             }
 
@@ -1074,6 +1092,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         ?array $installedMod = null
     ): void {
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        cache()->forget("pmm_basic_installed_{$server->uuid}");
+        cache()->forget("pmm_update_project_ids_{$server->uuid}");
+        $this->installedEnriched = false;
+        unset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        $this->installedUpdatesChecked = false;
 
         $fileRepository = app(DaemonFileRepository::class);
 
@@ -1222,12 +1246,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 if (!empty($item['is_local'])) {
                                     return false;
                                 }
-                                $versions = $this->getCachedVersions($item['project_id']);
-                                if (empty($versions)) {
-                                    return false;
-                                }
-                                $installedMod = $item['metadata'];
-                                return $installedMod['version_id'] !== $versions[0]['id'];
+                                return isset($this->installedUpdateProjectIds[$item['project_id']]);
                             }
                             return true;
                         }));
@@ -1399,13 +1418,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $dateTooltip = 'Updated ' . $carbonDate->timezone($timezone)->format('M j, Y, g:i A T');
                         }
 
-                        // Determine install state for button rendering
+                        // Determine install state for button rendering without fetching versions.
                         $installedMod = $this->getInstalledMod($record['project_id'] ?? '');
-                        $hasUpdate = false;
-                        if ($installedMod) {
-                            $versions = $this->getCachedVersions($record['project_id'] ?? '');
-                            $hasUpdate = !empty($versions) && ($installedMod['version_id'] !== ($versions[0]['id'] ?? null));
-                        }
+                        $hasUpdate = isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
 
                         $projectId = e($record['project_id'] ?? '');
                         $slug = e($record['slug'] ?? '');
@@ -1584,14 +1599,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         $showFileUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
 
                         // Check if this mod has an update available
-                        $hasModUpdate = false;
-                        if (!$isLocal && $projectId && !str_starts_with($projectId, 'local_')) {
-                            $latestVersions = $this->getCachedVersions($record['project_id'] ?? '');
-                            if (!empty($latestVersions)) {
-                                $meta = $record['metadata'] ?? null;
-                                $hasModUpdate = $meta && ($meta['version_id'] ?? '') !== ($latestVersions[0]['id'] ?? '');
-                            }
-                        }
+                        $hasModUpdate = !$isLocal && isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
 
                         // Single primary icon — green download (no border) when update available,
                         // ⇄ change-version otherwise. Both open the version-selection modal.
@@ -1825,19 +1833,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->label(trans('pelican-mod-manager::strings.actions.update'))
                     ->visible(function (array $record) {
                         if ($this->activeTab !== 'all') return false;
-                        $installedMod = $this->getInstalledMod($record['project_id']);
-
-                        if (is_null($installedMod)) {
-                            return false;
-                        }
-
-                        $versions = $this->getCachedVersions($record['project_id']);
-
-                        if (empty($versions)) {
-                            return false;
-                        }
-
-                        return $installedMod['version_id'] !== $versions[0]['id'];
+                        return isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
                     })
                     ->requiresConfirmation()
                     ->modalHeading(trans('pelican-mod-manager::strings.modals.update_heading'))
@@ -1913,13 +1909,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             return false;
                         }
 
-                        $versions = $this->getCachedVersions($record['project_id']);
-
-                        if (empty($versions)) {
-                            return true;
-                        }
-
-                        return $installedMod['version_id'] === $versions[0]['id'];
+                        return !isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
                     }),
                 Action::make('uninstall')
                     ->iconButton()
@@ -2841,18 +2831,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     {
         /** @var Server $server */
         $server = Filament::getTenant();
-        $hasAnyUpdate = false;
+        $updateProjectIds = [];
         foreach ($this->getInstalledModsMetadata() as $mod) {
             if (str_starts_with($mod['project_id'] ?? '', 'local_')) continue;
             $cacheKey = "pmm_versions_{$mod['project_id']}_{$server->uuid}";
             $versions = cache()->get($cacheKey, []);
             if (!empty($versions) && ($mod['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
-                $hasAnyUpdate = true;
-                break;
+                $updateProjectIds[] = $mod['project_id'];
             }
         }
-        $this->installedHasUpdates = $hasAnyUpdate;
-        cache()->put("pmm_has_updates_{$server->uuid}", $hasAnyUpdate, now()->addMinutes(5));
+        $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        cache()->put("pmm_update_project_ids_{$server->uuid}", $updateProjectIds, now()->addMinutes(5));
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
     }
 
     public function toggleModStatus(string $projectId, string $filename, bool $currentlyEnabled): void
@@ -2861,6 +2852,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             /** @var Server $server */
             $server = Filament::getTenant();
             cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+            cache()->forget("pmm_basic_installed_{$server->uuid}");
+            $this->installedEnriched = false;
+            $this->installedUpdatesChecked = false;
 
             $type = ModrinthProjectType::fromServer($server);
             if (!$type) {
@@ -3105,26 +3099,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->badge(),
                         TextEntry::make('installed')
                             ->label(fn () => trans('pelican-mod-manager::strings.page.installed', ['type' => $type?->getLabel() ?? 'Modrinth']))
-                            ->state(function (DaemonFileRepository $fileRepository) use ($server, $type) {
-                                try {
-                                    if (!$type) {
-                                        return trans('pelican-mod-manager::strings.page.unknown');
-                                    }
-
-                                    $files = $fileRepository->setServer($server)->getDirectory($type->getFolder());
-
-                                    if (isset($files['error'])) {
-                                        throw new Exception($files['error']);
-                                    }
-
-                                    return collect($files)
-                                        ->filter(fn ($file) => $file['mime'] === 'application/jar' || str($file['name'])->lower()->endsWith('.jar'))
-                                        ->count();
-                                } catch (Exception $exception) {
-                                    report($exception);
-
-                                    return trans('pelican-mod-manager::strings.page.unknown');
+                            ->state(function () use ($server) {
+                                $resolved = cache()->get("modrinth_installed_resolved_list_" . $server->uuid);
+                                if (is_array($resolved)) {
+                                    return count($resolved);
                                 }
+
+                                return count($this->getInstalledModsMetadata());
                             })
                             ->badge(),
                     ]),
@@ -3133,19 +3114,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->hiddenLabel()
                     ->hidden(fn () => $this->activeTab === 'installed')
                     ->state(fn () => new HtmlString($this->renderBrowseFilterBar())),
-                // Loading skeleton — visible only until the second Livewire request
-                // populates the data (loadInstalledData sets installedDataReady=true).
                 TextEntry::make('installed_loading')
                     ->hiddenLabel()
-                    ->hidden(fn () => $this->activeTab !== 'installed' || $this->installedDataReady)
-                    ->state(fn () => new HtmlString(
-                        "<div class='pmm-loading-indicator' x-data x-init=\"\$wire.call('loadInstalledData')\" "
-                        . "style='display:flex;align-items:center;justify-content:center;gap:14px;padding:80px 20px;color:#6b7280;font-size:15px;font-weight:500;'>"
-                        . "<style>@keyframes pmm-spin{to{transform:rotate(360deg)}}.pmm-spin{animation:pmm-spin 0.75s linear infinite;transform-origin:center}</style>"
-                        . "<svg class='pmm-spin' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 12a9 9 0 1 1-6.219-8.56'/></svg>"
-                        . "Loading mods…"
-                        . "</div>"
-                    )),
+                    ->hidden(fn () => true)
+                    ->state(fn () => new HtmlString('')),
                 TextEntry::make('installed_filter_bar')
                     ->hiddenLabel()
                     ->hidden(fn () => $this->activeTab !== 'installed' || !$this->installedDataReady)
@@ -3410,7 +3382,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function updatedActiveTab(): void
     {
         if ($this->activeTab === 'installed') {
-            $this->installedUpdatesChecked = false;
+            /** @var Server $server */
+            $server = Filament::getTenant();
+            $cachedUpdateProjectIds = cache()->get("pmm_update_project_ids_{$server->uuid}", []);
+            if (is_array($cachedUpdateProjectIds)) {
+                $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
+                $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+            }
+            $this->installedUpdatesChecked = cache()->has("pmm_update_project_ids_{$server->uuid}");
             // Don't reset installedDataReady/installedEnriched — keeps tab
             // switches fast within the same session once data is loaded.
         }
@@ -3447,7 +3426,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         /** @var Server $server */
         $server = Filament::getTenant();
-        $cacheKey = "pmm_has_updates_{$server->uuid}";
+        $updatesCacheKey = "pmm_update_project_ids_{$server->uuid}";
 
         $type = ModrinthProjectType::fromServer($server);
         if (!$type) { $this->installedUpdatesChecked = true; return; }
@@ -3465,8 +3444,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         // This call also warms the full Modrinth-enriched cache (5-min TTL),
         // so switching installedEnriched=true here gives instant re-renders.
-        $this->installedHasUpdates = cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
+        $updateProjectIds = cache()->remember($updatesCacheKey, now()->addMinutes(5), function () use ($server, $type) {
             $items = $this->getInstalledModsResolvedList($server, $type);
+            $ids = [];
             // Version cache is already warm from the parallel fetch above —
             // these getCachedVersions() calls hit in-memory only (zero network).
             foreach ($items as $item) {
@@ -3475,11 +3455,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 if (empty($versions)) continue;
                 $meta = $item['metadata'] ?? null;
                 if ($meta && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
-                    return true;
+                    $ids[] = $item['project_id'];
                 }
             }
-            return false;
+            return $ids;
         });
+        $updateProjectIds = is_array($updateProjectIds) ? $updateProjectIds : [];
+        $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
 
         // getInstalledModsResolvedList() is now cached — switch to enriched list
         $this->installedEnriched = true;
@@ -3498,18 +3482,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_has_updates_{$server->uuid}");
+        cache()->forget("pmm_update_project_ids_{$server->uuid}");
+        $this->installedEnriched = false;
+        $this->installedUpdateProjectIds = [];
         $this->installedHasUpdates = false;
         $this->installedUpdatesChecked = false;
 
-        // Keep the current list visible — no loading spinner.
-        // Re-fetch enriched data in this same request so the list updates in-place
-        // when Livewire renders the response. The page stays interactive throughout.
-        if ($this->installedDataReady) {
-            $type = ModrinthProjectType::fromServer($server);
-            if ($type) {
-                $this->checkInstalledUpdates();
-            }
-        }
     }
 
     public function updateAllMods(): void
@@ -3552,7 +3530,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         // All mods have been updated — hide the Updates chip and Update All button.
+        $this->installedUpdateProjectIds = [];
         $this->installedHasUpdates = false;
+        cache()->put("pmm_update_project_ids_{$server->uuid}", [], now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", false, now()->addMinutes(5));
         $this->js('$wire.$refresh()');
 

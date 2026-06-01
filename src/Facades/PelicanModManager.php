@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static ?string getMinecraftVersion(Server $server)
  * @method static array{icon: string, name: string, supported_project_types: string[], display_name: string}|null getLoaderFromServer(Server $server)
  * @method static array<int, array{icon: string, name: string, supported_project_types: string[]}> getLoaders()
- * @method static array{hits: array<int, array<string, mixed>>, total_hits: int} getProjects(Server $server, int $page = 1, ?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null)
+ * @method static array{hits: array<int, array<string, mixed>>, total_hits: int} getProjects(Server $server, int $page = 1, ?string $search = null, ?string $sortColumn = null, ?string $sortDirection = null, array $filters = [], int $limit = 20)
  * @method static array<int, array<string, mixed>> getInstalledModsFromModrinth(array<int, InstalledModMetadata> $installedMods, int $page = 1)
  * @method static array<int, ModrinthVersion> getProjectVersions(string $projectId, Server $server)
  * @method static array<int, InstalledModMetadata> getInstalledModsMetadata(Server $server)

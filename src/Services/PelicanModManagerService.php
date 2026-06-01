@@ -98,7 +98,9 @@ class PelicanModManagerService
         int $page = 1,
         ?string $search = null,
         ?string $sortColumn = null,
-        ?string $sortDirection = null
+        ?string $sortDirection = null,
+        array $filters = [],
+        int $limit = 20
     ): array {
         $projectType = ModrinthProjectType::fromServer($server)?->value;
         $minecraftLoader = $this->getLoaderFromServer($server);
@@ -113,10 +115,38 @@ class PelicanModManagerService
         $minecraftVersion = $this->getMinecraftVersion($server);
         $minecraftLoader = $minecraftLoader['name'];
 
+        $limit = max(1, min(100, $limit));
+        $facets = [
+            ["categories:$minecraftLoader"],
+            ["versions:$minecraftVersion"],
+            ["project_type:{$projectType}"],
+        ];
+
+        $categories = array_values(array_filter($filters['categories'] ?? []));
+        if (!empty($categories)) {
+            $facets[] = array_map(fn ($category) => "categories:{$category}", $categories);
+        }
+
+        $environments = array_values(array_filter($filters['environments'] ?? []));
+        if (in_array('client', $environments, true)) {
+            $facets[] = ['client_side:required', 'client_side:optional'];
+        }
+        if (in_array('server', $environments, true)) {
+            $facets[] = ['server_side:required', 'server_side:optional'];
+        }
+
+        if (!empty($filters['open_source'])) {
+            $facets[] = ['open_source:true'];
+        }
+
+        foreach (array_values(array_filter($filters['exclude_project_ids'] ?? [])) as $projectId) {
+            $facets[] = ["project_id!={$projectId}"];
+        }
+
         $data = [
-            'offset' => ($page - 1) * 20,
-            'limit' => 20,
-            'facets' => "[[\"categories:$minecraftLoader\"],[\"versions:$minecraftVersion\"],[\"project_type:{$projectType}\"]]",
+            'offset' => ($page - 1) * $limit,
+            'limit' => $limit,
+            'facets' => json_encode($facets),
         ];
 
         if ($sortColumn === 'downloads') {
@@ -125,7 +155,8 @@ class PelicanModManagerService
             $data['index'] = 'updated';
         }
 
-        $key = "modrinth_projects:{$projectType}:$minecraftVersion:$minecraftLoader:$page";
+        $filterKey = md5(json_encode($filters));
+        $key = "modrinth_projects:{$projectType}:$minecraftVersion:$minecraftLoader:$page:$limit:$filterKey";
 
         if ($search) {
             $data['query'] = $search;

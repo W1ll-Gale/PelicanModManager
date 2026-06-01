@@ -327,9 +327,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 /* Version + filename — fixed-width centre column */
                 .fi-ta-row > td:nth-child(3) {
-                    flex: 0 0 210px !important;
-                    width: 210px !important;
+                    flex: 0 0 320px !important;
+                    width: 320px !important;
                     align-self: center !important;
+                    white-space: nowrap !important;
+                    overflow: hidden !important;
                 }
 
                 /* All right-side controls (⇄ toggle 🗑 ⋮) — right half, content flushed right */
@@ -388,7 +390,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     margin-right: 12px !important;
                 }
                 thead th:nth-child(2) { flex: 1 1 0 !important; }
-                thead th:nth-child(3) { flex: 0 0 210px !important; width: 210px !important; text-align: center !important; }
+                thead th:nth-child(3) { flex: 0 0 320px !important; width: 320px !important; text-align: center !important; }
                 thead th:nth-child(4) { flex: 1 1 0 !important; text-align: right !important; }
                 thead th:last-child   { display: none !important; }
                 /* Filament renders sort headers as buttons — keep their text styled */
@@ -1447,7 +1449,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 TextColumn::make('filename')
                     ->label('Version')
                     ->visible(fn () => $this->activeTab === 'installed')
-                    ->wrap()
                     ->formatStateUsing(function ($state, $record) {
                         $isLocal = !empty($record['is_local']);
                         $version = $isLocal ? 'Local' : ($record['version_number'] ?? ($record['metadata']['version_number'] ?? 'Unknown'));
@@ -1470,7 +1471,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return new HtmlString("
                             <div style='display:flex; flex-direction:column; gap:4px; align-items:flex-start; text-align:left;'>
                                 {$versionHtml}
-                                <span style='font-size:11px; color:#6b7280; font-family:monospace; word-break:break-all;'>{$filename}</span>
+                                <span style='font-size:11px; color:#6b7280; font-family:monospace; white-space:nowrap;'>{$filename}</span>
                             </div>
                         ");
                     }),
@@ -1504,50 +1505,55 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             }
                         }
 
-                        // Change-version button OR green update button (both open the version modal)
+                        // Change-version button — always the ⇄ icon (Modrinth-tracked mods only)
                         $changeVersionBtn = '';
                         if (!$isLocal && $projectId) {
-                            if ($hasModUpdate) {
-                                $changeVersionBtn = "
-                                    <button type='button'
-                                        data-pmm-project-id=\"{$projectId}\"
-                                        data-pmm-title=\"{$title}\"
-                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
-                                        title='Update available — click to change version'
-                                        style='background:none; border:1px solid #1bd96a; cursor:pointer; padding:4px 8px; display:flex; align-items:center; gap:5px; color:#1bd96a; border-radius:6px; font-size:12px; font-weight:600;'
-                                        onmouseover=\"this.style.background='rgba(27,217,106,0.1)'\"
-                                        onmouseout=\"this.style.background='none'\">
-                                        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'/><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'/></svg>
-                                        Update
-                                    </button>";
-                            } else {
-                                $changeVersionBtn = "
-                                    <button type='button'
-                                        data-pmm-project-id=\"{$projectId}\"
-                                        data-pmm-title=\"{$title}\"
-                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
-                                        title='Change version'
-                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
-                                        onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
-                                        onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
-                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
-                                            <polyline points='17 1 21 5 17 9'></polyline>
-                                            <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
-                                            <polyline points='7 23 3 19 7 15'></polyline>
-                                            <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
-                                        </svg>
-                                    </button>";
-                            }
+                            $changeVersionBtn = "
+                                <button type='button'
+                                    data-pmm-project-id=\"{$projectId}\"
+                                    data-pmm-title=\"{$title}\"
+                                    x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
+                                    title='Change version'
+                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
+                                    onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
+                                    onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
+                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+                                        <polyline points='17 1 21 5 17 9'></polyline>
+                                        <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
+                                        <polyline points='7 23 3 19 7 15'></polyline>
+                                        <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
+                                    </svg>
+                                </button>";
                         }
 
-                        // Oval toggle switch
-                        $bg        = $isEnabled ? '#1BD96A' : '#27272a';
-                        $thumbLeft = $isEnabled ? '22px' : '2px';
+                        // Green download icon button — only shown when an update is available
+                        // Directly updates to latest version (no modal); sits left of the toggle.
+                        $updateIconBtn = '';
+                        if ($hasModUpdate && !$isLocal && $projectId) {
+                            $updateIconBtn = "
+                                <button type='button'
+                                    data-pmm-project-id=\"{$projectId}\"
+                                    x-on:click.stop=\"\$wire.updateMod(\$el.dataset.pmmProjectId)\"
+                                    title='Update to latest version'
+                                    style='background:none; border:1px solid rgba(27,217,106,0.5); cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#1bd96a; border-radius:6px; flex-shrink:0;'
+                                    onmouseover=\"this.style.background='rgba(27,217,106,0.15)'; this.style.borderColor='#1bd96a'\"
+                                    onmouseout=\"this.style.background='none'; this.style.borderColor='rgba(27,217,106,0.5)'\">
+                                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
+                                </button>";
+                        }
+
+                        // Oval toggle — optimistic Alpine state so it flips instantly on click
+                        // without waiting for the Livewire round-trip (Wings API rename ~1-2s).
                         $toggleHtml = "
-                            <div x-on:click.stop=\"\$wire.toggleModStatus('{$projectId}', '{$filename}', {$isEnabledJs})\"
+                            <div x-data=\"{ on: {$isEnabledJs} }\"
+                                 data-pmm-project-id=\"{$projectId}\"
+                                 data-pmm-filename=\"{$filename}\"
                                  title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
-                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; background:{$bg}; border-radius:9999px; transition:background 0.2s ease-in-out;'>
-                                <div style='position:absolute; top:2px; left:{$thumbLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'></div>
+                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; border-radius:9999px; transition:background 0.2s ease-in-out;'
+                                 :style=\"'background:' + (on ? '#1BD96A' : '#27272a')\"
+                                 x-on:click.stop=\"let wasOn=on; on=!on; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn)\">
+                                <div style='position:absolute; top:2px; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
+                                     :style=\"'left:' + (on ? '22px' : '2px')\"></div>
                             </div>";
 
                         // SVG icons for dropdown items and buttons
@@ -1636,11 +1642,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 </template>
                             </div>";
 
-                        // Final order: ⇄ change-version | toggle | 🗑 delete | ⋮ three-dot
+                        // Final order: ⇄ change-version | ⬇ update-icon (if update) | toggle | 🗑 delete | ⋮ three-dot
                         // width:100% + justify-content:flex-end ensures the group is flush-right inside td[4]
                         return new HtmlString("
                             <div style='display:flex; align-items:center; gap:4px; width:100%; justify-content:flex-end;'>
                                 {$changeVersionBtn}
+                                {$updateIconBtn}
                                 {$toggleHtml}
                                 {$deleteBtn}
                                 {$dotsDropdown}
@@ -2085,15 +2092,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     $arguments['projectId'] ?? '',
                     ['project_id' => $arguments['projectId'] ?? '', 'title' => $arguments['title'] ?? '']
                 )),
-            // Upload mod — CSS-hidden page action so the installed tab filter bar
-            // can trigger it via wire:click="mountAction('upload_mod')".
-            // Also shown in the page header on the browse tab.
+            // Upload mod — visible page header action (Filament handles modal wiring correctly).
             Action::make('upload_mod')
                 ->label(trans('pelican-mod-manager::strings.actions.upload_mod'))
                 ->tooltip(trans('pelican-mod-manager::strings.actions.upload_mod_tooltip'))
                 ->icon('tabler-upload')
                 ->color('primary')
-                ->visible(fn () => $this->activeTab !== 'installed')
                 ->schema([
                     FileUpload::make('file')
                         ->label(trans('pelican-mod-manager::strings.page.mod_file'))
@@ -2180,14 +2184,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->body($exception->getMessage())->danger()->send();
                     }
                 }),
-            Action::make('open_folder')
-                ->tooltip(fn () => trans('pelican-mod-manager::strings.page.open_folder', ['folder' => (ModrinthProjectType::fromServer(Filament::getTenant()))?->getFolder() ?? '']))
-                ->icon('tabler-folder-open')
-                ->visible(fn () => $this->activeTab !== 'installed')
-                ->url(function () {
-                    $type = ModrinthProjectType::fromServer(Filament::getTenant());
-                    return $type ? ListFiles::getUrl(['path' => $type->getFolder()]) : '#';
-                }, true),
             // Export modpack — triggered from the installed filter bar via mountAction('export_modpack').
             // Hidden from the page header; always mountable.
             Action::make('export_modpack')
@@ -2709,6 +2705,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             $this->installedModsMetadata = null;
             $this->versionsCache = [];
+            $this->recheckHasUpdates();
 
             Notification::make()
                 ->title(trans('pelican-mod-manager::strings.notifications.update_success'))
@@ -2729,6 +2726,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * Re-checks update availability using only cached version data and fresh metadata.
+     * No API calls — uses whatever version data is already in the Laravel cache.
+     * Call this after any single-mod update to keep the Updates chip and Update All button accurate.
+     */
+    protected function recheckHasUpdates(): void
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $hasAnyUpdate = false;
+        foreach ($this->getInstalledModsMetadata() as $mod) {
+            if (str_starts_with($mod['project_id'] ?? '', 'local_')) continue;
+            $cacheKey = "pmm_versions_{$mod['project_id']}_{$server->uuid}";
+            $versions = cache()->get($cacheKey, []);
+            if (!empty($versions) && ($mod['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
+                $hasAnyUpdate = true;
+                break;
+            }
+        }
+        $this->installedHasUpdates = $hasAnyUpdate;
+        cache()->put("pmm_has_updates_{$server->uuid}", $hasAnyUpdate, now()->addMinutes(5));
     }
 
     public function toggleModStatus(string $projectId, string $filename, bool $currentlyEnabled): void
@@ -2781,9 +2801,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
             }
 
+            // Update metadata and bust cache — no full re-render needed.
+            // The Alpine optimistic toggle already flipped the visual state instantly.
             $this->installedModsMetadata = null;
             $this->versionsCache = [];
-            $this->js('$wire.$refresh()');
 
             Notification::make()
                 ->title('Mod status updated')
@@ -3055,13 +3076,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         $hBtnBase = "display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:#e4e4e7;white-space:nowrap;text-decoration:none;transition:background 0.15s ease;box-sizing:border-box;";
         $hBtnHov  = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
-        $folderSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
-        $uploadSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 16 12 12 8 16'/><line x1='12' y1='12' x2='12' y2='21'/><path d='M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3'/></svg>";
         $exportSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
         $row1 = "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
             . $searchInput
-            . "<a href=\"{$folderUrl}\" target='_blank' style=\"{$hBtnBase}\"{$hBtnHov}>{$folderSvg}Open folder</a>"
-            . "<button type='button' wire:click=\"mountAction('upload_mod')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$uploadSvg}Upload files</button>"
             . "<button type='button' wire:click=\"mountAction('export_modpack')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$exportSvg}Export modpack</button>"
             . "</div>";
 
@@ -3347,7 +3364,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     {
         /** @var Server $server */
         $server = Filament::getTenant();
-        // Bust per-project version caches before clearing the metadata
         foreach ($this->getInstalledModsMetadata() as $mod) {
             cache()->forget("pmm_versions_{$mod['project_id']}_{$server->uuid}");
         }
@@ -3356,14 +3372,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_has_updates_{$server->uuid}");
-        $this->installedModsMetadata = null; // force metadata re-read too
         $this->installedHasUpdates = false;
         $this->installedUpdatesChecked = false;
-        $this->installedDataReady = false;
-        $this->installedEnriched = false;
-        // No explicit refresh needed — unsetting installedDataReady triggers re-render
-        // and the loading skeleton's x-init will fire loadInstalledData() again
-        Notification::make()->title('Refreshing…')->info()->send();
+
+        // Keep the current list visible — no loading spinner.
+        // Re-fetch enriched data in this same request so the list updates in-place
+        // when Livewire renders the response. The page stays interactive throughout.
+        if ($this->installedDataReady) {
+            $type = ModrinthProjectType::fromServer($server);
+            if ($type) {
+                $this->checkInstalledUpdates();
+            }
+        }
     }
 
     public function updateAllMods(): void
@@ -3405,6 +3425,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->installedModsMetadata = null;
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        // All mods have been updated — hide the Updates chip and Update All button.
+        $this->installedHasUpdates = false;
+        cache()->put("pmm_has_updates_{$server->uuid}", false, now()->addMinutes(5));
         $this->js('$wire.$refresh()');
 
         $msg = $failed === 0

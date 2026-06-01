@@ -1604,10 +1604,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                         data-pmm-title=\"{$title}\"
                                         x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
                                         title='Update available — click to choose version'
-                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; color:#1bd96a; border-radius:6px; flex-shrink:0;'
+                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; border-radius:6px; flex-shrink:0;'
                                         onmouseover=\"this.style.background='rgba(27,217,106,0.12)'\"
                                         onmouseout=\"this.style.background='none'\">
-                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
+                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
                                     </button>";
                             } else {
                                 $primaryIconBtn = "
@@ -1631,15 +1631,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         // Oval toggle — optimistic Alpine state so it flips instantly on click
                         // without waiting for the Livewire round-trip (Wings API rename ~1-2s).
+                        // Inline background is the CSS fallback so the toggle is visible even before
+                        // Alpine initialises. Alpine's :style overrides it once it boots.
+                        $toggleBg = $isEnabled ? '#1BD96A' : '#27272a';
+                        $toggleKnobLeft = $isEnabled ? '22px' : '2px';
                         $toggleHtml = "
                             <div x-data=\"{ on: {$isEnabledJs} }\"
                                  data-pmm-project-id=\"{$projectId}\"
                                  data-pmm-filename=\"{$filename}\"
                                  title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
-                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; border-radius:9999px; transition:background 0.2s ease-in-out;'
+                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; border-radius:9999px; transition:background 0.2s ease-in-out; background:{$toggleBg};'
                                  :style=\"'background:' + (on ? '#1BD96A' : '#27272a')\"
                                  x-on:click.stop=\"let wasOn=on; on=!on; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn)\">
-                                <div style='position:absolute; top:2px; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
+                                <div style='position:absolute; top:2px; left:{$toggleKnobLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
                                      :style=\"'left:' + (on ? '22px' : '2px')\"></div>
                             </div>";
 

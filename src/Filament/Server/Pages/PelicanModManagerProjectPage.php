@@ -112,6 +112,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function mount(): void
     {
         $this->loadDefaultActiveTab();
+        // Pre-load metadata so the installed tab never shows a spinner on first
+        // page visit — installedDataReady is true before the first render fires.
+        if ($this->activeTab === 'installed') {
+            $this->loadInstalledData();
+        }
     }
 
     public function getTableRecordKey(mixed $record): string
@@ -1569,41 +1574,40 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             }
                         }
 
-                        // Change-version button — always the ⇄ icon (Modrinth-tracked mods only)
-                        $changeVersionBtn = '';
+                        // Single primary icon — green download (no border) when update available,
+                        // ⇄ change-version otherwise. Both open the version-selection modal.
+                        $primaryIconBtn = '';
                         if (!$isLocal && $projectId) {
-                            $changeVersionBtn = "
-                                <button type='button'
-                                    data-pmm-project-id=\"{$projectId}\"
-                                    data-pmm-title=\"{$title}\"
-                                    x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
-                                    title='Change version'
-                                    style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
-                                    onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
-                                    onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
-                                    <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
-                                        <polyline points='17 1 21 5 17 9'></polyline>
-                                        <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
-                                        <polyline points='7 23 3 19 7 15'></polyline>
-                                        <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
-                                    </svg>
-                                </button>";
-                        }
-
-                        // Green download icon button — only shown when an update is available
-                        // Directly updates to latest version (no modal); sits left of the toggle.
-                        $updateIconBtn = '';
-                        if ($hasModUpdate && !$isLocal && $projectId) {
-                            $updateIconBtn = "
-                                <button type='button'
-                                    data-pmm-project-id=\"{$projectId}\"
-                                    x-on:click.stop=\"\$wire.updateMod(\$el.dataset.pmmProjectId)\"
-                                    title='Update to latest version'
-                                    style='background:none; border:1px solid rgba(27,217,106,0.5); cursor:pointer; padding:5px; display:flex; align-items:center; justify-content:center; color:#1bd96a; border-radius:6px; flex-shrink:0;'
-                                    onmouseover=\"this.style.background='rgba(27,217,106,0.15)'; this.style.borderColor='#1bd96a'\"
-                                    onmouseout=\"this.style.background='none'; this.style.borderColor='rgba(27,217,106,0.5)'\">
-                                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
-                                </button>";
+                            if ($hasModUpdate) {
+                                $primaryIconBtn = "
+                                    <button type='button'
+                                        data-pmm-project-id=\"{$projectId}\"
+                                        data-pmm-title=\"{$title}\"
+                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
+                                        title='Update available — click to choose version'
+                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; justify-content:center; color:#1bd96a; border-radius:6px; flex-shrink:0;'
+                                        onmouseover=\"this.style.background='rgba(27,217,106,0.12)'\"
+                                        onmouseout=\"this.style.background='none'\">
+                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
+                                    </button>";
+                            } else {
+                                $primaryIconBtn = "
+                                    <button type='button'
+                                        data-pmm-project-id=\"{$projectId}\"
+                                        data-pmm-title=\"{$title}\"
+                                        x-on:click.stop=\"\$wire.openBrowseVersions(\$el.dataset.pmmProjectId, \$el.dataset.pmmTitle)\"
+                                        title='Change version'
+                                        style='background:none; border:none; cursor:pointer; padding:4px; display:flex; align-items:center; color:#a1a1aa; border-radius:6px;'
+                                        onmouseover=\"this.style.color='#ffffff'; this.style.background='rgba(255,255,255,0.08)'\"
+                                        onmouseout=\"this.style.color='#a1a1aa'; this.style.background='none'\">
+                                        <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+                                            <polyline points='17 1 21 5 17 9'></polyline>
+                                            <path d='M3 11V9a4 4 0 0 1 4-4h14'></path>
+                                            <polyline points='7 23 3 19 7 15'></polyline>
+                                            <path d='M21 13v2a4 4 0 0 1-4 4H3'></path>
+                                        </svg>
+                                    </button>";
+                            }
                         }
 
                         // Oval toggle — optimistic Alpine state so it flips instantly on click
@@ -1706,12 +1710,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 </template>
                             </div>";
 
-                        // Final order: ⇄ change-version | ⬇ update-icon (if update) | toggle | 🗑 delete | ⋮ three-dot
+                        // Final order: ⬇/⇄ primary icon | toggle | 🗑 delete | ⋮ three-dot
                         // width:100% + justify-content:flex-end ensures the group is flush-right inside td[4]
                         return new HtmlString("
                             <div style='display:flex; align-items:center; gap:4px; width:100%; justify-content:flex-end;'>
-                                {$changeVersionBtn}
-                                {$updateIconBtn}
+                                {$primaryIconBtn}
                                 {$toggleHtml}
                                 {$deleteBtn}
                                 {$dotsDropdown}

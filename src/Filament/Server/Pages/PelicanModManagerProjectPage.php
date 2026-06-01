@@ -986,7 +986,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->invalidateMetadataCache();
                             $this->versionsCache = [];
-                            $this->js('$wire.$refresh()');
 
                             Notification::make()
                                 ->title(trans('pelican-mod-manager::strings.notifications.install_success'))
@@ -1001,7 +1000,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->invalidateMetadataCache();
                             $this->versionsCache = [];
-                            $this->js('$wire.$refresh()');
 
                             Notification::make()
                                 ->title(trans('pelican-mod-manager::strings.notifications.install_failed'))
@@ -1153,16 +1151,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         array $primaryFile,
         ?array $installedMod = null
     ): void {
-        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-        cache()->forget("pmm_basic_installed_{$server->uuid}");
-        cache()->forget("pmm_update_project_ids_{$server->uuid}");
-        cache()->forget("pmm_update_check_complete_{$server->uuid}");
-        $this->installedEnriched = false;
-        unset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
-        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
-        $this->installedUpdatesChecked = false;
-        $this->installedUpdateCheckCursor = 0;
-
         $fileRepository = app(DaemonFileRepository::class);
 
         $safeNewFilename = $this->validateFilename($primaryFile['filename']);
@@ -1249,6 +1237,197 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 throw $deleteException;
             }
         }
+
+        $this->patchInstalledCachesAfterInstallOrUpdate($server, $record, $versionData, $safeNewFilename, $installedMod);
+    }
+
+    /**
+     * Keep the installed tab enriched while a single row changes.
+     *
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $versionData
+     * @param array<string, mixed>|null $installedMod
+     */
+    private function patchInstalledCachesAfterInstallOrUpdate(
+        Server $server,
+        array $record,
+        array $versionData,
+        string $filename,
+        ?array $installedMod = null
+    ): void {
+        $projectId = $record['project_id'] ?? null;
+        if (!$projectId) return;
+
+        unset($this->installedUpdateProjectIds[$projectId]);
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        cache()->put("pmm_update_project_ids_{$server->uuid}", array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
+
+        $metadata = [
+            'project_id' => $projectId,
+            'project_slug' => $record['slug'] ?? ($installedMod['project_slug'] ?? ''),
+            'project_title' => $record['title'] ?? ($installedMod['project_title'] ?? $projectId),
+            'version_id' => $versionData['id'] ?? '',
+            'version_number' => $versionData['version_number'] ?? '',
+            'filename' => $filename,
+            'installed_at' => now()->toIso8601String(),
+        ];
+        if (($record['author'] ?? ($installedMod['author'] ?? null)) !== null) {
+            $metadata['author'] = $record['author'] ?? $installedMod['author'];
+        }
+
+        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+            $cacheKey = $prefix . $server->uuid;
+            $cachedItems = cache()->get($cacheKey);
+            if (!is_array($cachedItems)) continue;
+
+            $found = false;
+            $cachedItems = array_map(function (array $item) use (&$found, $projectId, $filename, $metadata, $versionData, $record) {
+                if (($item['project_id'] ?? null) !== $projectId) {
+                    return $item;
+                }
+
+                $found = true;
+                $item['filename'] = $filename;
+                $item['is_disabled'] = false;
+                $item['is_local'] = false;
+                $item['metadata'] = $metadata;
+                $item['version_number'] = $versionData['version_number'] ?? ($item['version_number'] ?? '');
+                $item['slug'] = $metadata['project_slug'];
+                $item['title'] = $metadata['project_title'];
+                $item['author'] = $record['author'] ?? ($metadata['author'] ?? ($item['author'] ?? ''));
+
+                return $item;
+            }, $cachedItems);
+
+            if (!$found) {
+                $cachedItems[] = [
+                    'project_id' => $projectId,
+                    'slug' => $metadata['project_slug'],
+                    'title' => $metadata['project_title'],
+                    'filename' => $filename,
+                    'installed_at' => $metadata['installed_at'],
+                    'author' => $metadata['author'] ?? ($record['author'] ?? ''),
+                    'author_avatar' => null,
+                    'icon_url' => $record['icon_url'] ?? null,
+                    'project_type' => $record['project_type'] ?? 'mod',
+                    'is_local' => false,
+                    'is_disabled' => false,
+                    'metadata' => $metadata,
+                ];
+            }
+
+            cache()->put($cacheKey, array_values($cachedItems), now()->addMinutes(5));
+        }
+
+        $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid, []);
+        $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
+            ->contains(fn ($item) => !empty($item['is_disabled']));
+        if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
+            $this->installedStatusFilter = 'all';
+        }
+    }
+
+    /**
+     * Remove uninstalled rows from installed-list caches without dropping the
+     * entire enriched list back to placeholders.
+     *
+     * @param string[] $projectIds
+     * @param string[] $filenames
+     */
+    private function removeInstalledRowsFromCaches(Server $server, array $projectIds = [], array $filenames = []): void
+    {
+        $projectIds = array_values(array_filter($projectIds));
+        $filenames = array_map(fn ($filename) => strtolower(str_replace('.disabled', '', $filename)), array_filter($filenames));
+
+        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+            $cacheKey = $prefix . $server->uuid;
+            $cachedItems = cache()->get($cacheKey);
+            if (!is_array($cachedItems)) continue;
+
+            $cachedItems = array_values(array_filter($cachedItems, function (array $item) use ($projectIds, $filenames) {
+                $projectId = $item['project_id'] ?? '';
+                $filename = strtolower(str_replace('.disabled', '', $item['filename'] ?? ''));
+
+                if ($projectId && in_array($projectId, $projectIds, true)) {
+                    return false;
+                }
+                if ($filename && in_array($filename, $filenames, true)) {
+                    return false;
+                }
+
+                return true;
+            }));
+
+            cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
+        }
+
+        foreach ($projectIds as $projectId) {
+            unset($this->installedUpdateProjectIds[$projectId]);
+            unset($this->versionsCache[$projectId]);
+        }
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid, []);
+        $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
+            ->contains(fn ($item) => !empty($item['is_disabled']));
+        if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
+            $this->installedStatusFilter = 'all';
+        }
+
+        cache()->put("pmm_update_project_ids_{$server->uuid}", array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
+    }
+
+    private function addLocalInstalledRowToCaches(Server $server, ModrinthProjectType $type, string $filename): void
+    {
+        $isDisabled = str_ends_with(strtolower($filename), '.disabled');
+        $cleanFilename = str_replace('.disabled', '', $filename);
+        $row = [
+            'project_id' => 'local_' . md5($filename),
+            'slug' => '',
+            'title' => basename($cleanFilename, '.jar'),
+            'description' => 'Local mod file (' . $filename . ')',
+            'icon_url' => null,
+            'author' => 'Unknown',
+            'author_avatar' => null,
+            'downloads' => 0,
+            'date_modified' => now()->toIso8601String(),
+            'project_type' => $type->value,
+            'unavailable' => true,
+            'filename' => $filename,
+            'is_local' => true,
+            'is_disabled' => $isDisabled,
+        ];
+
+        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+            $cacheKey = $prefix . $server->uuid;
+            $cachedItems = cache()->get($cacheKey);
+            if (!is_array($cachedItems)) continue;
+
+            $normalizedFilename = strtolower(str_replace('.disabled', '', $filename));
+            $cachedItems = array_values(array_filter($cachedItems, function (array $item) use ($normalizedFilename) {
+                $itemFilename = strtolower(str_replace('.disabled', '', $item['filename'] ?? ''));
+                return $itemFilename !== $normalizedFilename;
+            }));
+            $cachedItems[] = $row;
+
+            cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
+        }
+
+        $this->installedHasDisabled = $this->installedHasDisabled || $isDisabled;
+    }
+
+    private function rebuildInstalledCachesNow(Server $server, ?ModrinthProjectType $type = null): void
+    {
+        $type ??= ModrinthProjectType::fromServer($server);
+        if (!$type) return;
+
+        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
+        cache()->forget("pmm_basic_installed_{$server->uuid}");
+
+        $this->getBasicInstalledList($server, $type);
+        $this->getInstalledModsResolvedList($server, $type);
+        $this->installedEnriched = true;
     }
 
     /**
@@ -2007,7 +2186,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         try {
                             /** @var Server $server */
                             $server = Filament::getTenant();
-                            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
 
                             if (!empty($record['is_local'])) {
                                 $filename = $record['filename'];
@@ -2060,9 +2238,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 $this->versionsCache = [];
                             }
 
-                            if ($this->activeTab === 'installed') {
-                                $this->js('$wire.$refresh()');
-                            }
+                            $this->removeInstalledRowsFromCaches(
+                                $server,
+                                empty($record['is_local']) ? [$record['project_id']] : [],
+                                [$filename]
+                            );
 
                             Notification::make()
                                 ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
@@ -2076,10 +2256,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->invalidateMetadataCache();
                             $this->versionsCache = [];
-
-                            if ($this->activeTab === 'installed') {
-                                $this->js('$wire.$refresh()');
-                            }
 
                             Notification::make()
                                 ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
@@ -2110,6 +2286,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $folder = $type->getFolder();
                             $filesToDelete = [];
                             $projectIdsToRemove = [];
+                            $filenamesToRemove = [];
 
                             foreach ($records as $record) {
                                 if (!empty($record['is_local'])) {
@@ -2126,6 +2303,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                                 if ($filename) {
                                     $filesToDelete[] = $folder . '/' . $this->validateFilename($filename);
+                                    $filenamesToRemove[] = $filename;
                                 }
                             }
 
@@ -2144,7 +2322,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->invalidateMetadataCache();
                             $this->versionsCache = [];
-                            $this->js('$wire.$refresh()');
+                            $this->removeInstalledRowsFromCaches($server, $projectIdsToRemove, $filenamesToRemove);
 
                             Notification::make()
                                 ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
@@ -2188,7 +2366,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     try {
                         /** @var Server $server */
                         $server = Filament::getTenant();
-                        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
 
                         if (!$isLocal) {
                             $installedMod = $this->getInstalledMod($projectId);
@@ -2217,7 +2394,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         $this->invalidateMetadataCache();
                         $this->versionsCache = [];
-                        $this->js('$wire.$refresh()');
+                        $this->removeInstalledRowsFromCaches(
+                            $server,
+                            !$isLocal ? [$projectId] : [],
+                            [$safeFilename]
+                        );
 
                         Notification::make()
                             ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
@@ -2228,7 +2409,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         report($exception);
                         $this->invalidateMetadataCache();
                         $this->versionsCache = [];
-                        $this->js('$wire.$refresh()');
                         Notification::make()
                             ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
                             ->body(trans('pelican-mod-manager::strings.notifications.uninstall_failed_body'))
@@ -2299,6 +2479,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $projectName = basename($safeFilename, '.jar');
                             $projectSlug = $projectId = $versionId = $versionNumber = '';
                             $author = null;
+                            $projectIconUrl = null;
+                            $projectType = $type->value;
+                            $versionData = [];
                             if ($sha1) {
                                 try {
                                     $vr = Http::asJson()->timeout(10)->connectTimeout(5)->get("https://api.modrinth.com/v2/version_file/{$sha1}?algorithm=sha1");
@@ -2312,6 +2495,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                                 $pd = $pr->json();
                                                 $projectId = $pId; $projectSlug = $pd['slug'] ?? ''; $projectName = $pd['title'] ?? $projectName;
                                                 $versionId = $vId; $versionNumber = $vd['version_number'] ?? '';
+                                                $projectIconUrl = $pd['icon_url'] ?? null;
+                                                $projectType = $pd['project_type'] ?? $projectType;
+                                                $versionData = $vd;
                                                 PelicanModManager::saveModMetadata($server, $projectId, $projectSlug, $projectName, $versionId, $versionNumber, $safeFilename, $author);
                                                 $resolved = true;
                                             }
@@ -2320,8 +2506,23 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 } catch (Exception $ae) { Log::warning('Modrinth upload hash lookup: ' . $ae->getMessage()); }
                             }
                             $this->invalidateMetadataCache(); $this->versionsCache = [];
-                            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-                            $this->js('$wire.$refresh()');
+                            if ($resolved) {
+                                $this->patchInstalledCachesAfterInstallOrUpdate(
+                                    $server,
+                                    [
+                                        'project_id' => $projectId,
+                                        'slug' => $projectSlug ?: $projectId,
+                                        'title' => $projectName,
+                                        'author' => $author,
+                                        'icon_url' => $projectIconUrl,
+                                        'project_type' => $projectType,
+                                    ],
+                                    $versionData,
+                                    $safeFilename
+                                );
+                            } else {
+                                $this->addLocalInstalledRowToCaches($server, $type, $safeFilename);
+                            }
                             Notification::make()->title(trans('pelican-mod-manager::strings.notifications.install_success'))
                                 ->body($resolved ? "Uploaded, verified and registered: {$projectName}" : "Uploaded as local mod: {$safeFilename}")->success()->send();
                         } else {
@@ -2707,8 +2908,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             $this->invalidateMetadataCache();
             $this->versionsCache = [];
-            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-            $this->js('$wire.$refresh()');
+            $this->rebuildInstalledCachesNow($server);
 
             Notification::make()
                 ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_success'))
@@ -2735,8 +2935,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             $this->invalidateMetadataCache();
             $this->versionsCache = [];
-            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-            $this->js('$wire.$refresh()');
+            $this->rebuildInstalledCachesNow($server);
 
             Notification::make()
                 ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_failed'))
@@ -3709,14 +3908,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         $this->invalidateMetadataCache();
         $this->versionsCache = [];
-        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-        // All mods have been updated — hide the Updates chip and Update All button.
-        $this->installedUpdateProjectIds = [];
-        $this->installedHasUpdates = false;
-        cache()->put("pmm_update_project_ids_{$server->uuid}", [], now()->addMinutes(5));
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        cache()->put("pmm_update_project_ids_{$server->uuid}", array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
         cache()->put("pmm_update_check_complete_{$server->uuid}", true, now()->addMinutes(5));
-        cache()->put("pmm_has_updates_{$server->uuid}", false, now()->addMinutes(5));
-        $this->js('$wire.$refresh()');
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
 
         $msg = $failed === 0
             ? "Updated {$updated} mod(s) successfully."

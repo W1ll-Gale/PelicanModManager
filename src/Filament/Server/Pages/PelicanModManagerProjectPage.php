@@ -112,11 +112,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function mount(): void
     {
         $this->loadDefaultActiveTab();
-        // Pre-load metadata so the installed tab never shows a spinner on first
-        // page visit — installedDataReady is true before the first render fires.
-        if ($this->activeTab === 'installed') {
-            $this->loadInstalledData();
-        }
     }
 
     public function getTableRecordKey(mixed $record): string
@@ -339,7 +334,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     overflow: hidden !important;
                 }
 
-                /* All right-side controls (⇄ toggle 🗑 ⋮) — right half, content flushed right */
+                /* All right-side controls (⇄/⬇ toggle 🗑 ⋮) — right half, content flushed right */
                 .fi-ta-row > td:nth-child(4) {
                     flex: 1 1 0 !important;
                     display: flex !important;
@@ -347,6 +342,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     justify-content: flex-end !important;
                     gap: 4px !important;
                     overflow: visible !important;
+                }
+                /* Override shared block layout inside the actions cell so the
+                   flex container from formatStateUsing renders horizontally */
+                .fi-ta-row > td:nth-child(4) .fi-ta-col,
+                .fi-ta-row > td:nth-child(4) .fi-ta-text,
+                .fi-ta-row > td:nth-child(4) .fi-ta-text-item,
+                .fi-ta-row > td:nth-child(4) > a {
+                    display: contents !important;
+                    width: auto !important;
                 }
 
                 /* Filament actions td — hidden (actions are rendered inside td[4] HtmlString) */
@@ -475,10 +479,25 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             /** @var Server $server */
             $server = Filament::getTenant();
 
-            $this->installedModsMetadata = PelicanModManager::getInstalledModsMetadata($server);
+            // Cache the Wings daemon file read so subsequent Livewire requests
+            // (and the very first page load after the first visit) are instant.
+            $cacheKey = "pmm_metadata_{$server->uuid}";
+            $this->installedModsMetadata = cache()->remember(
+                $cacheKey,
+                now()->addMinutes(5),
+                fn () => PelicanModManager::getInstalledModsMetadata($server)
+            );
         }
 
         return $this->installedModsMetadata;
+    }
+
+    protected function invalidateMetadataCache(): void
+    {
+        $this->installedModsMetadata = null;
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        cache()->forget("pmm_metadata_{$server->uuid}");
     }
 
     /**
@@ -885,7 +904,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->performInstallOrUpdate($server, $record, $versionData, $primaryFile, $installedMod);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
                             $this->js('$wire.$refresh()');
 
@@ -900,7 +919,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } catch (Exception $exception) {
                             report($exception);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
                             $this->js('$wire.$refresh()');
 
@@ -1772,7 +1791,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
 
                             Notification::make()
@@ -1786,7 +1805,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } catch (Exception $exception) {
                             report($exception);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
 
                             Notification::make()
@@ -1854,7 +1873,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile, $installedMod);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
 
                             Notification::make()
@@ -1867,7 +1886,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } catch (Exception $exception) {
                             report($exception);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
 
                             Notification::make()
@@ -1965,11 +1984,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                                     unset($this->versionsCache[$record['project_id']]);
                                 } else {
-                                    $this->installedModsMetadata = null;
+                                    $this->invalidateMetadataCache();
                                     $this->versionsCache = [];
                                 }
                             } else {
-                                $this->installedModsMetadata = null;
+                                $this->invalidateMetadataCache();
                                 $this->versionsCache = [];
                             }
 
@@ -1987,7 +2006,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         } catch (Exception $exception) {
                             report($exception);
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
 
                             if ($this->activeTab === 'installed') {
@@ -2055,7 +2074,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 PelicanModManager::removeModMetadata($server, $pId);
                             }
 
-                            $this->installedModsMetadata = null;
+                            $this->invalidateMetadataCache();
                             $this->versionsCache = [];
                             $this->js('$wire.$refresh()');
 
@@ -2128,7 +2147,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             PelicanModManager::removeModMetadata($server, $projectId);
                         }
 
-                        $this->installedModsMetadata = null;
+                        $this->invalidateMetadataCache();
                         $this->versionsCache = [];
                         $this->js('$wire.$refresh()');
 
@@ -2139,7 +2158,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             ->send();
                     } catch (Exception $exception) {
                         report($exception);
-                        $this->installedModsMetadata = null;
+                        $this->invalidateMetadataCache();
                         $this->versionsCache = [];
                         $this->js('$wire.$refresh()');
                         Notification::make()
@@ -2232,7 +2251,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                     }
                                 } catch (Exception $ae) { Log::warning('Modrinth upload hash lookup: ' . $ae->getMessage()); }
                             }
-                            $this->installedModsMetadata = null; $this->versionsCache = [];
+                            $this->invalidateMetadataCache(); $this->versionsCache = [];
                             cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
                             $this->js('$wire.$refresh()');
                             Notification::make()->title(trans('pelican-mod-manager::strings.notifications.install_success'))
@@ -2618,7 +2637,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $this->importFilesToDownload = null;
             $this->importDownloadedMods = [];
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
             cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
             $this->js('$wire.$refresh()');
@@ -2646,7 +2665,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $this->importFilesToDownload = null;
             $this->importDownloadedMods = [];
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
             cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
             $this->js('$wire.$refresh()');
@@ -2727,7 +2746,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ];
             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile);
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
 
             Notification::make()
@@ -2741,7 +2760,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         } catch (Exception $exception) {
             report($exception);
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
 
             Notification::make()
@@ -2784,7 +2803,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ];
             $this->performInstallOrUpdate($server, $record, $latestVersion, $primaryFile, $installedMod);
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
             $this->recheckHasUpdates();
 
@@ -2798,7 +2817,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         } catch (Exception $exception) {
             report($exception);
 
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
 
             Notification::make()
@@ -2884,7 +2903,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             // Update metadata and bust cache — no full re-render needed.
             // The Alpine optimistic toggle already flipped the visual state instantly.
-            $this->installedModsMetadata = null;
+            $this->invalidateMetadataCache();
             $this->versionsCache = [];
 
             Notification::make()
@@ -3470,7 +3489,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         foreach ($this->getInstalledModsMetadata() as $mod) {
             cache()->forget("pmm_versions_{$mod['project_id']}_{$server->uuid}");
         }
-        $this->installedModsMetadata = null;
+        $this->invalidateMetadataCache();
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_basic_installed_{$server->uuid}");
@@ -3525,7 +3544,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             }
         }
 
-        $this->installedModsMetadata = null;
+        $this->invalidateMetadataCache();
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         // All mods have been updated — hide the Updates chip and Update All button.

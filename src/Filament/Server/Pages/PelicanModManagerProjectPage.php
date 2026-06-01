@@ -68,6 +68,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     // Phase 1: local metadata renders immediately; no Wings folder scan or Modrinth call.
     /** @var array<string, bool> Project IDs known to have updates after the lazy background check. */
     public array $installedUpdateProjectIds = [];
+    public int $installedUpdateCheckCursor = 0;
+    public int $installedUpdateCheckBatchSize = 10;
     public bool $installedDataReady = true;
     // Phase 2: Modrinth-enriched list (icons, author avatars) loaded in background
     public bool $installedEnriched = false;
@@ -121,7 +123,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         if (is_array($cachedUpdateProjectIds)) {
             $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
             $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
-            $this->installedUpdatesChecked = cache()->has("pmm_update_project_ids_{$server->uuid}");
+            $this->installedUpdatesChecked = cache()->get("pmm_update_check_complete_{$server->uuid}", false) === true;
         }
     }
 
@@ -1094,10 +1096,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
         cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_update_project_ids_{$server->uuid}");
+        cache()->forget("pmm_update_check_complete_{$server->uuid}");
         $this->installedEnriched = false;
         unset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
         $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
         $this->installedUpdatesChecked = false;
+        $this->installedUpdateCheckCursor = 0;
 
         $fileRepository = app(DaemonFileRepository::class);
 
@@ -1579,7 +1583,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         ");
                     }),
                 // Change-version button + enable/disable toggle — installed tab only
-                TextColumn::make('is_disabled')
+                TextColumn::make('project_id')
                     ->label('Actions')
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->formatStateUsing(function ($state, $record) {
@@ -2843,6 +2847,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
         $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
         cache()->put("pmm_update_project_ids_{$server->uuid}", $updateProjectIds, now()->addMinutes(5));
+        cache()->put("pmm_update_check_complete_{$server->uuid}", true, now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
     }
 
@@ -2855,6 +2860,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             cache()->forget("pmm_basic_installed_{$server->uuid}");
             $this->installedEnriched = false;
             $this->installedUpdatesChecked = false;
+            $this->installedUpdateCheckCursor = 0;
 
             $type = ModrinthProjectType::fromServer($server);
             if (!$type) {
@@ -3139,7 +3145,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         // ── Lazy update-check trigger — fires once after render, uses server-side cache ──
         // Uses the public installedUpdatesChecked flag to avoid redundant AJAX after first check.
-        $lazyCheck = "<div x-data x-init=\"\$nextTick(() => { if (!\$wire.installedUpdatesChecked) \$wire.call('checkInstalledUpdates'); })\" style='display:none'></div>";
+        $lazyCheck = "<div x-data x-init=\"\$nextTick(() => { if (!\$wire.installedEnriched) \$wire.call('checkInstalledUpdates'); })\" style='display:none'></div>";
 
         // ── Row 1: search input (left, wide) + Open folder + Upload files (right) ──
         $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
@@ -3389,7 +3395,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
                 $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
             }
-            $this->installedUpdatesChecked = cache()->has("pmm_update_project_ids_{$server->uuid}");
+            $this->installedUpdatesChecked = cache()->get("pmm_update_check_complete_{$server->uuid}", false) === true;
             // Don't reset installedDataReady/installedEnriched — keeps tab
             // switches fast within the same session once data is loaded.
         }
@@ -3431,43 +3437,62 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $type = ModrinthProjectType::fromServer($server);
         if (!$type) { $this->installedUpdatesChecked = true; return; }
 
-        // Fire all per-mod version requests in parallel NOW — before the slow
-        // Wings + Modrinth-projects calls inside getInstalledModsResolvedList().
-        // By the time that function returns, all version data is already cached.
+        $completeCacheKey = "pmm_update_check_complete_{$server->uuid}";
+
+        // Warm icons, author names/avatars, and local jars first. Update checks
+        // are chunked so this request does not fan out across every project at once.
+        $items = $this->getInstalledModsResolvedList($server, $type);
+        $this->installedEnriched = true;
+
+        $cachedUpdateProjectIds = cache()->get($updatesCacheKey, []);
+        if (is_array($cachedUpdateProjectIds)) {
+            $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
+            $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        }
+
         $metadataIds = collect($this->getInstalledModsMetadata())
             ->pluck('project_id')
             ->filter(fn ($id) => !str_starts_with($id, 'local_'))
             ->unique()
             ->values()
             ->toArray();
-        $this->warmVersionsCacheParallel($server, $metadataIds);
 
-        // This call also warms the full Modrinth-enriched cache (5-min TTL),
-        // so switching installedEnriched=true here gives instant re-renders.
-        $updateProjectIds = cache()->remember($updatesCacheKey, now()->addMinutes(5), function () use ($server, $type) {
-            $items = $this->getInstalledModsResolvedList($server, $type);
-            $ids = [];
-            // Version cache is already warm from the parallel fetch above —
-            // these getCachedVersions() calls hit in-memory only (zero network).
-            foreach ($items as $item) {
-                if (!empty($item['is_local'])) continue;
-                $versions = $this->getCachedVersions($item['project_id']);
-                if (empty($versions)) continue;
-                $meta = $item['metadata'] ?? null;
-                if ($meta && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
-                    $ids[] = $item['project_id'];
-                }
+        if (empty($metadataIds) || cache()->get($completeCacheKey, false) === true) {
+            $this->installedUpdatesChecked = true;
+            cache()->put($completeCacheKey, true, now()->addMinutes(5));
+            cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
+            return;
+        }
+
+        $this->installedUpdateCheckCursor = min($this->installedUpdateCheckCursor, count($metadataIds));
+        $batchIds = array_slice($metadataIds, $this->installedUpdateCheckCursor, $this->installedUpdateCheckBatchSize);
+        $this->warmVersionsCacheParallel($server, $batchIds);
+
+        $itemsByProjectId = collect($items)->keyBy('project_id');
+        foreach ($batchIds as $projectId) {
+            $item = $itemsByProjectId->get($projectId);
+            $meta = $item['metadata'] ?? $this->getInstalledMod($projectId);
+            $versions = $this->getCachedVersions($projectId);
+            if ($meta && !empty($versions) && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
+                $this->installedUpdateProjectIds[$projectId] = true;
+            } else {
+                unset($this->installedUpdateProjectIds[$projectId]);
             }
-            return $ids;
-        });
-        $updateProjectIds = is_array($updateProjectIds) ? $updateProjectIds : [];
-        $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
+        }
+
+        $this->installedUpdateCheckCursor += count($batchIds);
         $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        $this->installedUpdatesChecked = $this->installedUpdateCheckCursor >= count($metadataIds);
+        cache()->put($updatesCacheKey, array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
+        cache()->put($completeCacheKey, $this->installedUpdatesChecked, now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
 
-        // getInstalledModsResolvedList() is now cached — switch to enriched list
-        $this->installedEnriched = true;
-        $this->installedUpdatesChecked = true;
+        if (!$this->installedUpdatesChecked) {
+            $this->js("setTimeout(() => \$wire.call('checkInstalledUpdates'), 150)");
+        }
+
+        return;
+
     }
 
     public function refreshInstalled(): void
@@ -3483,10 +3508,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("pmm_basic_installed_{$server->uuid}");
         cache()->forget("pmm_has_updates_{$server->uuid}");
         cache()->forget("pmm_update_project_ids_{$server->uuid}");
+        cache()->forget("pmm_update_check_complete_{$server->uuid}");
         $this->installedEnriched = false;
         $this->installedUpdateProjectIds = [];
         $this->installedHasUpdates = false;
         $this->installedUpdatesChecked = false;
+        $this->installedUpdateCheckCursor = 0;
 
     }
 
@@ -3533,6 +3560,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->installedUpdateProjectIds = [];
         $this->installedHasUpdates = false;
         cache()->put("pmm_update_project_ids_{$server->uuid}", [], now()->addMinutes(5));
+        cache()->put("pmm_update_check_complete_{$server->uuid}", true, now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", false, now()->addMinutes(5));
         $this->js('$wire.$refresh()');
 

@@ -947,6 +947,67 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     }
 
     /**
+     * Fetches version data for multiple projects in parallel using Http::pool().
+     * Fires one concurrent request per project instead of N sequential round-trips.
+     * Populates both the in-memory versionsCache and Laravel cache so every
+     * subsequent getCachedVersions() call is instant (zero network).
+     *
+     * @param string[] $projectIds
+     */
+    protected function warmVersionsCacheParallel(Server $server, array $projectIds): void
+    {
+        if (empty($projectIds)) return;
+
+        $loader     = PelicanModManager::getLoaderFromServer($server);
+        $loaderName = strtolower($loader['name'] ?? '');
+        $mcVersion  = PelicanModManager::getMinecraftVersion($server);
+
+        // Skip IDs already in memory; pull the rest from Laravel cache if present
+        $needed = [];
+        foreach ($projectIds as $id) {
+            if (isset($this->versionsCache[$id])) continue;
+            $cacheKey = "pmm_versions_{$id}_{$server->uuid}";
+            $cached = cache()->get($cacheKey);
+            if ($cached !== null) {
+                $this->versionsCache[$id] = $cached;
+            } else {
+                $needed[] = $id;
+            }
+        }
+
+        if (empty($needed)) return;
+
+        $params = [];
+        if ($loaderName) $params['loaders']       = json_encode([$loaderName]);
+        if ($mcVersion)  $params['game_versions']  = json_encode([$mcVersion]);
+
+        try {
+            $responses = Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($needed, $params) {
+                foreach ($needed as $id) {
+                    $pool->as($id)
+                        ->timeout(10)
+                        ->connectTimeout(5)
+                        ->get("https://api.modrinth.com/v2/project/{$id}/version", $params);
+                }
+            });
+
+            foreach ($responses as $id => $response) {
+                $versions = [];
+                if (!($response instanceof \Exception) && $response->successful()) {
+                    $versions = $response->json() ?: [];
+                    if (is_array($versions) && !empty($versions)) {
+                        usort($versions, fn ($a, $b) => strcmp($b['date_published'] ?? '', $a['date_published'] ?? ''));
+                    }
+                }
+                cache()->put("pmm_versions_{$id}_{$server->uuid}", $versions, now()->addMinutes(10));
+                $this->versionsCache[$id] = $versions;
+            }
+        } catch (\Exception $e) {
+            report($e);
+        }
+    }
+
+    /**
      * @param  array<int, array{primary: bool, filename: string, url: string}>  $files
      * @return array{primary: bool, filename: string, url: string}|null
      */
@@ -1362,13 +1423,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                     Installed
                                 </div>";
                         } elseif ($installedMod && $hasUpdate) {
+                            // Icon-only green download button — no text, same compact style as installed tab
                             $actionBtn = "
-                                <button type='button' wire:click.stop=\"updateMod('{$projectId}')\"
-                                    style=\"{$btnBase} {$actionBtnWidth} border:1px solid #f59e0b; background:transparent; color:#f59e0b;\"
-                                    onmouseover=\"this.style.background='rgba(245,158,11,0.1)'\"
-                                    onmouseout=\"this.style.background='transparent'\">
-                                    <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='23 4 23 10 17 10'></polyline><path d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'></path></svg>
-                                    Update
+                                <button type='button'
+                                    data-pmm-project-id=\"{$projectId}\"
+                                    x-on:click.stop=\"\$wire.updateMod(\$el.dataset.pmmProjectId)\"
+                                    title='Update to latest version'
+                                    style=\"{$btnBase} {$actionBtnWidth} border:1px solid rgba(27,217,106,0.5); background:transparent; color:#1bd96a;\"
+                                    onmouseover=\"this.style.background='rgba(27,217,106,0.15)'; this.style.borderColor='#1bd96a'\"
+                                    onmouseout=\"this.style.background='transparent'; this.style.borderColor='rgba(27,217,106,0.5)'\">
+                                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>
                                 </button>";
                         } else {
                             $actionBtn = "
@@ -2092,12 +2156,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     $arguments['projectId'] ?? '',
                     ['project_id' => $arguments['projectId'] ?? '', 'title' => $arguments['title'] ?? '']
                 )),
-            // Upload mod — visible page header action (Filament handles modal wiring correctly).
+            // Upload mod — CSS-hidden page action triggered via openUploadModal() from the
+            // installed tab filter bar. Hidden from the header so it doesn't appear on
+            // the browse tab; the openUploadModal() wrapper guards against activeTab mismatch.
             Action::make('upload_mod')
                 ->label(trans('pelican-mod-manager::strings.actions.upload_mod'))
                 ->tooltip(trans('pelican-mod-manager::strings.actions.upload_mod_tooltip'))
                 ->icon('tabler-upload')
                 ->color('primary')
+                ->extraAttributes(['style' => 'display:none !important'])
                 ->schema([
                     FileUpload::make('file')
                         ->label(trans('pelican-mod-manager::strings.page.mod_file'))
@@ -2611,6 +2678,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->mountAction('confirm_uninstall', compact('projectId', 'filename', 'isLocal', 'title'));
     }
 
+    /**
+     * Opens the upload_mod modal from the installed tab filter bar.
+     * The activeTab guard prevents queued Livewire requests (from spam-clicking)
+     * from mounting the modal after the user has already switched to another tab.
+     */
+    public function openUploadModal(): void
+    {
+        if ($this->activeTab !== 'installed') return;
+        $this->mountAction('upload_mod');
+    }
+
     public function copyModLink(string $slug, string $projectType = 'mod'): void
     {
         if (empty($slug)) return;
@@ -3074,11 +3152,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             . "onfocus=\"this.style.borderColor='rgba(27,217,106,0.4)'\" onblur=\"this.style.borderColor='rgba(255,255,255,0.1)'\"/>"
             . "</div>";
 
-        $hBtnBase = "display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:#e4e4e7;white-space:nowrap;text-decoration:none;transition:background 0.15s ease;box-sizing:border-box;";
-        $hBtnHov  = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
+        $hBtnBase  = "display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:#e4e4e7;white-space:nowrap;text-decoration:none;transition:background 0.15s ease;box-sizing:border-box;";
+        $hBtnHov   = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
+        $uploadSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 16 12 12 8 16'/><line x1='12' y1='12' x2='12' y2='21'/><path d='M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3'/></svg>";
         $exportSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
         $row1 = "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
             . $searchInput
+            . "<button type='button' wire:click=\"openUploadModal\" style=\"{$hBtnBase}\"{$hBtnHov}>{$uploadSvg}Upload files</button>"
             . "<button type='button' wire:click=\"mountAction('export_modpack')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$exportSvg}Export modpack</button>"
             . "</div>";
 
@@ -3328,6 +3408,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /**
      * Triggered lazily from the filter bar's x-init after the page renders.
      * Uses a 5-minute Laravel cache so repeated calls (filter clicks, search, etc.) are instant.
+     *
+     * Key speed trick: we know every Modrinth project_id from the local metadata file
+     * (no network needed). So we fire all per-mod version requests in parallel via
+     * Http::pool() at the same time as the Wings file-listing + Modrinth bulk-projects
+     * calls inside getInstalledModsResolvedList(). The version pool finishes in ~1s
+     * regardless of mod count, eliminating the previous N × 0.5-1s sequential wait.
      */
     public function checkInstalledUpdates(): void
     {
@@ -3340,10 +3426,24 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $type = ModrinthProjectType::fromServer($server);
         if (!$type) { $this->installedUpdatesChecked = true; return; }
 
+        // Fire all per-mod version requests in parallel NOW — before the slow
+        // Wings + Modrinth-projects calls inside getInstalledModsResolvedList().
+        // By the time that function returns, all version data is already cached.
+        $metadataIds = collect($this->getInstalledModsMetadata())
+            ->pluck('project_id')
+            ->filter(fn ($id) => !str_starts_with($id, 'local_'))
+            ->unique()
+            ->values()
+            ->toArray();
+        $this->warmVersionsCacheParallel($server, $metadataIds);
+
         // This call also warms the full Modrinth-enriched cache (5-min TTL),
         // so switching installedEnriched=true here gives instant re-renders.
         $this->installedHasUpdates = cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
-            foreach ($this->getInstalledModsResolvedList($server, $type) as $item) {
+            $items = $this->getInstalledModsResolvedList($server, $type);
+            // Version cache is already warm from the parallel fetch above —
+            // these getCachedVersions() calls hit in-memory only (zero network).
+            foreach ($items as $item) {
                 if (!empty($item['is_local'])) continue;
                 $versions = $this->getCachedVersions($item['project_id']);
                 if (empty($versions)) continue;

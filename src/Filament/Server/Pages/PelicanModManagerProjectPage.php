@@ -3925,7 +3925,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             'game-mechanics' => $makeIcon("<path d='M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'/>"),
             'library' => $makeIcon("<path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2'/>"),
             'magic' => $makeIcon("<path d='M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5'/>"),
-            'management' => $makeIcon("<rect x='2' y='2' rx='2' ry='2'/><rect x='2' y='14' rx='2' ry='2'/><path d='M6 6h.01M6 18h.01'/>"),
+            'management' => $makeIcon("<rect width='20' height='8' x='2' y='2' rx='2' ry='2'/><rect width='20' height='8' x='2' y='14' rx='2' ry='2'/><path d='M6 6h.01M6 18h.01'/>"),
             'minigame' => $makeIcon("<circle cx='12' cy='8' r='7'/><path d='M8.21 13.89 7 23l5-3 5 3-1.21-9.12'/>"),
             'mobs' => "<svg fill-rule='evenodd' stroke-linejoin='round' stroke-miterlimit='1.5' clip-rule='evenodd' viewBox='0 0 24 24'><path fill='none' d='M0 0h24v24H0z'/><path fill='none' stroke='currentColor' stroke-width='2' d='M3 3h18v18H3z'/><path fill='currentColor' stroke='currentColor' d='M6 6h4v4H6zm8 0h4v4h-4zm-4 4h4v2h2v6h-2v-2h-4v2H8v-6h2z'/></svg>",
             'optimization' => $makeIcon("<path d='M13 2 3 14h9l-1 8 10-12h-9z'/>"),
@@ -3933,7 +3933,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             'storage' => $makeIcon("<path d='M21 8v13H3V8M1 3h22v5H1zM10 12h4'/>"),
             'technology' => $makeIcon("<path d='M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01'/>"),
             'transportation' => $makeIcon("<path d='M1 3h15v13H1zM16 8h4l3 3v5h-7z'/><circle cx='5.5' cy='18.5' r='2.5'/><circle cx='18.5' cy='18.5' r='2.5'/>"),
-            'utility' => $makeIcon("<rect x='2' y='7' rx='2' ry='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/>"),
+            'utility' => $makeIcon("<rect width='20' height='14' x='2' y='7' rx='2' ry='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/>"),
             'worldgen' => "<svg fill='none' stroke='currentColor' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M3.055 11H5a2 2 0 0 1 2 2v1a2 2 0 0 0 2 2 2 2 0 0 1 2 2v2.945M8 3.935V5.5A2.5 2.5 0 0 0 10.5 8h.5a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h1.064M15 20.488V18a2 2 0 0 1 2-2h3.064M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0'/></svg>",
         ];
         $envIcons = [

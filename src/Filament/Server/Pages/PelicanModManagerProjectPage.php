@@ -3618,16 +3618,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->values()
             ->toArray();
 
-        $this->warmVersionsCacheParallel($server, $metadataIds);
-
         $updateProjectIds = [];
-        $itemsByProjectId = collect($items)->keyBy('project_id');
-        foreach ($metadataIds as $projectId) {
-            $item = $itemsByProjectId->get($projectId);
-            $meta = $item['metadata'] ?? $this->getInstalledMod($projectId);
-            $versions = $this->getCachedVersions($projectId);
-            if ($meta && !empty($versions) && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
-                $updateProjectIds[] = $projectId;
+        $metadataByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
+        foreach (array_chunk($metadataIds, $this->installedUpdateCheckBatchSize) as $batchIds) {
+            $this->warmVersionsCacheParallel($server, $batchIds);
+
+            foreach ($batchIds as $projectId) {
+                $meta = $metadataByProjectId->get($projectId) ?? $this->getInstalledMod($projectId);
+                $versions = $this->getCachedVersions($projectId);
+                if ($meta && !empty($versions) && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
+                    $updateProjectIds[] = $projectId;
+                }
             }
         }
 

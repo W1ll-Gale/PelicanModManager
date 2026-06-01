@@ -127,6 +127,10 @@ class PelicanModManagerService
             $facets[] = array_map(fn ($category) => "categories:{$category}", $categories);
         }
 
+        foreach (array_values(array_filter($filters['excluded_categories'] ?? [])) as $category) {
+            $facets[] = ["categories!={$category}"];
+        }
+
         $environments = array_values(array_filter($filters['environments'] ?? []));
         if (in_array('client', $environments, true)) {
             $facets[] = ['client_side:required', 'client_side:optional'];
@@ -135,17 +139,27 @@ class PelicanModManagerService
             $facets[] = ['server_side:required', 'server_side:optional'];
         }
 
+        $excludedEnvironments = array_values(array_filter($filters['excluded_environments'] ?? []));
+        if (in_array('client', $excludedEnvironments, true)) {
+            $facets[] = ['client_side:unsupported'];
+        }
+        if (in_array('server', $excludedEnvironments, true)) {
+            $facets[] = ['server_side:unsupported'];
+        }
+
         if (!empty($filters['open_source'])) {
             $facets[] = ['open_source:true'];
         }
-
-        foreach (array_values(array_filter($filters['exclude_project_ids'] ?? [])) as $projectId) {
-            $facets[] = ["project_id!={$projectId}"];
+        if (!empty($filters['exclude_open_source'])) {
+            $facets[] = ['open_source:false'];
         }
+
+        $excludedProjectIds = array_flip(array_values(array_filter($filters['exclude_project_ids'] ?? [])));
+        $requestLimit = !empty($excludedProjectIds) ? min(100, max($limit * 3, $limit + 10)) : $limit;
 
         $data = [
             'offset' => ($page - 1) * $limit,
-            'limit' => $limit,
+            'limit' => $requestLimit,
             'facets' => json_encode($facets),
         ];
 
@@ -185,6 +199,16 @@ class PelicanModManagerService
                 ];
             }
         });
+
+        if (!empty($excludedProjectIds) && isset($response['hits']) && is_array($response['hits'])) {
+            $response['hits'] = collect($response['hits'])
+                ->reject(fn ($hit) => isset($excludedProjectIds[$hit['project_id'] ?? '']))
+                ->take($limit)
+                ->values()
+                ->toArray();
+            $response['total_hits'] = max(0, (int)($response['total_hits'] ?? 0) - count($excludedProjectIds));
+            $response['limit'] = count($response['hits']);
+        }
 
         if ($sortColumn === 'title' || $sortColumn === 'author') {
             $descending = $sortDirection === 'desc';

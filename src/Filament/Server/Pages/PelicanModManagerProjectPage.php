@@ -62,8 +62,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /** @var string[] */
     public array $browseCategoryFilters = [];
     /** @var string[] */
+    public array $browseExcludedCategoryFilters = [];
+    /** @var string[] */
     public array $browseEnvironmentFilters = [];
+    /** @var string[] */
+    public array $browseExcludedEnvironmentFilters = [];
     public bool $browseOpenSourceOnly = false;
+    public bool $browseExcludeOpenSource = false;
     public bool $browseHideInstalled = false;
     public string $installedStatusFilter = 'all';
     public string $installedSearch = '';
@@ -253,9 +258,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 border-radius: 12px;
                 padding: 8px;
                 width: min(292px, calc(100vw - 16px));
-                max-height: min(760px, calc(100vh - 24px));
+                max-height: calc(100vh - 88px);
                 overflow: auto;
                 box-shadow: 0 16px 44px rgba(0,0,0,0.65);
+                scrollbar-width: thin;
+                scrollbar-color: #9ca3af transparent;
             }
 
             .pmm-browse-filter-section {
@@ -280,12 +287,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 margin-bottom: 10px;
             }
 
-            .pmm-browse-facet {
+            .pmm-browse-facet-row {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                width: 100%;
+                min-height: 28px;
+                margin: 1px 0;
+            }
+
+            .pmm-browse-facet-choice {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 10px;
-                width: 100%;
+                min-width: 0;
+                flex: 1;
                 min-height: 28px;
                 padding: 5px 8px;
                 border: 0;
@@ -299,13 +316,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 transition: background-color 0.08s ease, color 0.08s ease;
             }
 
-            .pmm-browse-facet:hover {
+            .pmm-browse-facet-choice:hover {
                 background: rgba(255,255,255,0.06);
                 color: #d4d4d8;
             }
 
-            .pmm-browse-facet.pmm-browse-facet-active {
+            .pmm-browse-facet-choice.pmm-browse-facet-active {
                 background: #225f3b;
+                color: #ffffff;
+            }
+
+            .pmm-browse-facet-row.pmm-browse-facet-excluded .pmm-browse-facet-choice {
+                background: #6d2d3e;
                 color: #ffffff;
             }
 
@@ -329,6 +351,57 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 height: 14px;
                 color: #ffffff;
                 flex-shrink: 0;
+            }
+
+            .pmm-browse-facet-check-hover {
+                display: none;
+                opacity: 0.75;
+            }
+
+            .pmm-browse-facet-choice:hover .pmm-browse-facet-check-hover {
+                display: inline-flex;
+                color: #1bd96a;
+            }
+
+            .pmm-browse-facet-exclude {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 5px;
+                width: 28px;
+                height: 28px;
+                border: 0;
+                border-radius: 999px;
+                background: transparent;
+                color: #9ca3af;
+                cursor: pointer;
+                font-size: 12px;
+                font-weight: 800;
+                overflow: hidden;
+                opacity: 0;
+                transition: width 0.1s ease, background-color 0.08s ease, color 0.08s ease;
+            }
+
+            .pmm-browse-facet-exclude span {
+                display: none;
+            }
+
+            .pmm-browse-facet-row:hover .pmm-browse-facet-exclude,
+            .pmm-browse-facet-exclude:focus-visible {
+                opacity: 1;
+            }
+
+            .pmm-browse-facet-exclude:hover,
+            .pmm-browse-facet-row.pmm-browse-facet-excluded .pmm-browse-facet-exclude {
+                width: 76px;
+                background: #7f1d1d;
+                color: #ffffff;
+                opacity: 1;
+            }
+
+            .pmm-browse-facet-exclude:hover span,
+            .pmm-browse-facet-row.pmm-browse-facet-excluded .pmm-browse-facet-exclude span {
+                display: inline;
             }
 
             .pmm-browse-filter-toggle {
@@ -3747,6 +3820,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->browseCategoryFilters = in_array($category, $this->browseCategoryFilters, true)
             ? array_values(array_diff($this->browseCategoryFilters, [$category]))
             : array_values(array_unique([...$this->browseCategoryFilters, $category]));
+        $this->browseExcludedCategoryFilters = array_values(array_diff($this->browseExcludedCategoryFilters, [$category]));
+        $this->gotoPage(1);
+    }
+
+    public function toggleBrowseExcludedCategoryFilter(string $category): void
+    {
+        if (!array_key_exists($category, $this->getBrowseCategoryOptions())) return;
+
+        $this->browseExcludedCategoryFilters = in_array($category, $this->browseExcludedCategoryFilters, true)
+            ? array_values(array_diff($this->browseExcludedCategoryFilters, [$category]))
+            : array_values(array_unique([...$this->browseExcludedCategoryFilters, $category]));
+        $this->browseCategoryFilters = array_values(array_diff($this->browseCategoryFilters, [$category]));
         $this->gotoPage(1);
     }
 
@@ -3757,12 +3842,36 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->browseEnvironmentFilters = in_array($environment, $this->browseEnvironmentFilters, true)
             ? array_values(array_diff($this->browseEnvironmentFilters, [$environment]))
             : array_values(array_unique([...$this->browseEnvironmentFilters, $environment]));
+        $this->browseExcludedEnvironmentFilters = array_values(array_diff($this->browseExcludedEnvironmentFilters, [$environment]));
+        $this->gotoPage(1);
+    }
+
+    public function toggleBrowseExcludedEnvironmentFilter(string $environment): void
+    {
+        if (!in_array($environment, ['client', 'server'], true)) return;
+
+        $this->browseExcludedEnvironmentFilters = in_array($environment, $this->browseExcludedEnvironmentFilters, true)
+            ? array_values(array_diff($this->browseExcludedEnvironmentFilters, [$environment]))
+            : array_values(array_unique([...$this->browseExcludedEnvironmentFilters, $environment]));
+        $this->browseEnvironmentFilters = array_values(array_diff($this->browseEnvironmentFilters, [$environment]));
         $this->gotoPage(1);
     }
 
     public function toggleBrowseOpenSourceFilter(): void
     {
         $this->browseOpenSourceOnly = !$this->browseOpenSourceOnly;
+        if ($this->browseOpenSourceOnly) {
+            $this->browseExcludeOpenSource = false;
+        }
+        $this->gotoPage(1);
+    }
+
+    public function toggleBrowseExcludeOpenSourceFilter(): void
+    {
+        $this->browseExcludeOpenSource = !$this->browseExcludeOpenSource;
+        if ($this->browseExcludeOpenSource) {
+            $this->browseOpenSourceOnly = false;
+        }
         $this->gotoPage(1);
     }
 
@@ -3777,8 +3886,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     {
         $filters = [
             'categories' => $this->browseCategoryFilters,
+            'excluded_categories' => $this->browseExcludedCategoryFilters,
             'environments' => $this->browseEnvironmentFilters,
+            'excluded_environments' => $this->browseExcludedEnvironmentFilters,
             'open_source' => $this->browseOpenSourceOnly,
+            'exclude_open_source' => $this->browseExcludeOpenSource,
         ];
 
         if ($this->browseHideInstalled) {
@@ -3800,8 +3912,36 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $chevSvg  = "<svg width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>";
         $checkSvg = "<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='#1bd96a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
         $panelCheckSvg = "<svg class='pmm-browse-facet-check' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.7' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>";
-        $facetIconSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 3'/></svg>";
+        $slashSvg = "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='9'/><path d='M5.7 5.7l12.6 12.6'/></svg>";
         $filterSvg = "<svg width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='M3 5h18'/><path d='M6 12h12'/><path d='M10 19h4'/></svg>";
+        $makeIcon = fn (string $body) => "<svg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' viewBox='0 0 24 24'>{$body}</svg>";
+        $categoryIcons = [
+            'adventure' => $makeIcon("<circle cx='12' cy='12' r='10'/><path d='m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z'/>"),
+            'cursed' => $makeIcon("<rect x='7' y='7.5' rx='5'/><path d='m2 12.5 2 2h3M22 12.5l-2 2h-3M3 21.5l2-3 2-1M21 21.5l-2-3-2-1M3 8.5l2 2 2 1M21 8.5l-2 2-2 1M12 7.5v14M15.38 8.82A3 3 0 0 0 16 7h0a3 3 0 0 0-3-3h-2a3 3 0 0 0-3 3h0a3 3 0 0 0 .61 1.82M9 4.5l-1-2M15 4.5l1-2'/>"),
+            'decoration' => $makeIcon("<path d='m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><path d='M9 22V12h6v10'/>"),
+            'economy' => $makeIcon("<path d='M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/>"),
+            'equipment' => $makeIcon("<path d='M17.573 20.038 3.849 7.913 2.753 2.755 7.838 4.06 19.47 18.206l-1.898 1.832zM7.45 14.455l-3.043 3.661 1.887 1.843 3.717-3.25M16.75 10.82l3.333-2.913 1.123-5.152-5.091 1.28-2.483 2.985'/><path d='m21.131 16.602-5.187 5.01 2.596-2.508 2.667 2.761M2.828 16.602l5.188 5.01-2.597-2.508-2.667 2.761'/>"),
+            'food' => $makeIcon("<path d='M2.27 21.7s9.87-3.5 12.73-6.36a4.5 4.5 0 0 0-6.36-6.37C5.77 11.84 2.27 21.7 2.27 21.7M8.64 14l-2.05-2.04M15.34 15l-2.46-2.46'/><path d='M22 9s-1.33-2-3.5-2C16.86 7 15 9 15 9s1.33 2 3.5 2S22 9 22 9'/><path d='M15 2s-2 1.33-2 3.5S15 9 15 9s2-1.84 2-3.5C17 3.33 15 2 15 2'/>"),
+            'game-mechanics' => $makeIcon("<path d='M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6'/>"),
+            'library' => $makeIcon("<path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2'/>"),
+            'magic' => $makeIcon("<path d='M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5'/>"),
+            'management' => $makeIcon("<rect x='2' y='2' rx='2' ry='2'/><rect x='2' y='14' rx='2' ry='2'/><path d='M6 6h.01M6 18h.01'/>"),
+            'minigame' => $makeIcon("<circle cx='12' cy='8' r='7'/><path d='M8.21 13.89 7 23l5-3 5 3-1.21-9.12'/>"),
+            'mobs' => "<svg fill-rule='evenodd' stroke-linejoin='round' stroke-miterlimit='1.5' clip-rule='evenodd' viewBox='0 0 24 24'><path fill='none' d='M0 0h24v24H0z'/><path fill='none' stroke='currentColor' stroke-width='2' d='M3 3h18v18H3z'/><path fill='currentColor' stroke='currentColor' d='M6 6h4v4H6zm8 0h4v4h-4zm-4 4h4v2h2v6h-2v-2h-4v2H8v-6h2z'/></svg>",
+            'optimization' => $makeIcon("<path d='M13 2 3 14h9l-1 8 10-12h-9z'/>"),
+            'social' => $makeIcon("<path d='M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z'/>"),
+            'storage' => $makeIcon("<path d='M21 8v13H3V8M1 3h22v5H1zM10 12h4'/>"),
+            'technology' => $makeIcon("<path d='M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01'/>"),
+            'transportation' => $makeIcon("<path d='M1 3h15v13H1zM16 8h4l3 3v5h-7z'/><circle cx='5.5' cy='18.5' r='2.5'/><circle cx='18.5' cy='18.5' r='2.5'/>"),
+            'utility' => $makeIcon("<rect x='2' y='7' rx='2' ry='2'/><path d='M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16'/>"),
+            'worldgen' => "<svg fill='none' stroke='currentColor' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M3.055 11H5a2 2 0 0 1 2 2v1a2 2 0 0 0 2 2 2 2 0 0 1 2 2v2.945M8 3.935V5.5A2.5 2.5 0 0 0 10.5 8h.5a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h1.064M15 20.488V18a2 2 0 0 1 2-2h3.064M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0'/></svg>",
+        ];
+        $envIcons = [
+            'client' => "<svg fill='none' stroke='currentColor' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M9.75 17 9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2'/></svg>",
+            'server' => $makeIcon("<path d='M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01'/>"),
+            'open-source' => "<span style='width:14px;display:inline-block'></span>",
+        ];
+        $openSourceIcon = $envIcons['open-source'];
 
         // Shared dropdown button style
         $ddBtn = "display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,0.12);color:#a1a1aa;background:rgba(255,255,255,0.04);transition:all 0.15s ease;";
@@ -3811,34 +3951,49 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $searchSvg = "<svg style='position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
         $categoryItems = '';
         foreach ($this->getBrowseCategoryOptions() as $slug => $label) {
-            $categoryItems .= "<button type='button' class='pmm-browse-facet' wire:click=\"toggleBrowseCategoryFilter('{$slug}')\" "
-                . "x-on:click=\"toggle(cats, '{$slug}')\" :class=\"cats.includes('{$slug}') ? 'pmm-browse-facet-active' : ''\">"
-                . "<span class='pmm-browse-facet-left'>{$facetIconSvg}<span>" . e($label) . "</span></span>"
+            $icon = $categoryIcons[$slug] ?? $makeIcon("<circle cx='12' cy='12' r='9'/>");
+            $categoryItems .= "<div class='pmm-browse-facet-row' :class=\"excCats.includes('{$slug}') ? 'pmm-browse-facet-excluded' : ''\">"
+                . "<button type='button' class='pmm-browse-facet-choice' "
+                . "x-on:click=\"selectFacet(cats, excCats, '{$slug}'); \$wire.call('toggleBrowseCategoryFilter', '{$slug}')\" :class=\"cats.includes('{$slug}') ? 'pmm-browse-facet-active' : ''\">"
+                . "<span class='pmm-browse-facet-left'>{$icon}<span>" . e($label) . "</span></span>"
                 . "<span x-show=\"cats.includes('{$slug}')\" x-cloak>{$panelCheckSvg}</span>"
-                . "</button>";
+                . "<span x-show=\"!cats.includes('{$slug}') && !excCats.includes('{$slug}')\" x-cloak class='pmm-browse-facet-check-hover'>{$panelCheckSvg}</span>"
+                . "</button>"
+                . "<button type='button' class='pmm-browse-facet-exclude' "
+                . "x-on:click.stop=\"excludeFacet(excCats, cats, '{$slug}'); \$wire.call('toggleBrowseExcludedCategoryFilter', '{$slug}')\">{$slashSvg}<span>Exclude</span></button>"
+                . "</div>";
         }
 
         $environmentItems = '';
         foreach (['client' => 'Client', 'server' => 'Server'] as $env => $label) {
-            $environmentItems .= "<button type='button' class='pmm-browse-facet' wire:click=\"toggleBrowseEnvironmentFilter('{$env}')\" "
-                . "x-on:click=\"toggle(envs, '{$env}')\" :class=\"envs.includes('{$env}') ? 'pmm-browse-facet-active' : ''\">"
-                . "<span class='pmm-browse-facet-left'>{$facetIconSvg}<span>" . e($label) . "</span></span>"
+            $icon = $envIcons[$env];
+            $environmentItems .= "<div class='pmm-browse-facet-row' :class=\"excEnvs.includes('{$env}') ? 'pmm-browse-facet-excluded' : ''\">"
+                . "<button type='button' class='pmm-browse-facet-choice' "
+                . "x-on:click=\"selectFacet(envs, excEnvs, '{$env}'); \$wire.call('toggleBrowseEnvironmentFilter', '{$env}')\" :class=\"envs.includes('{$env}') ? 'pmm-browse-facet-active' : ''\">"
+                . "<span class='pmm-browse-facet-left'>{$icon}<span>" . e($label) . "</span></span>"
                 . "<span x-show=\"envs.includes('{$env}')\" x-cloak>{$panelCheckSvg}</span>"
-                . "</button>";
+                . "<span x-show=\"!envs.includes('{$env}') && !excEnvs.includes('{$env}')\" x-cloak class='pmm-browse-facet-check-hover'>{$panelCheckSvg}</span>"
+                . "</button>"
+                . "<button type='button' class='pmm-browse-facet-exclude' "
+                . "x-on:click.stop=\"excludeFacet(excEnvs, envs, '{$env}'); \$wire.call('toggleBrowseExcludedEnvironmentFilter', '{$env}')\">{$slashSvg}<span>Exclude</span></button>"
+                . "</div>";
         }
 
         $catsJson = e(json_encode(array_values($this->browseCategoryFilters)));
+        $excCatsJson = e(json_encode(array_values($this->browseExcludedCategoryFilters)));
         $envJson = e(json_encode(array_values($this->browseEnvironmentFilters)));
+        $excEnvJson = e(json_encode(array_values($this->browseExcludedEnvironmentFilters)));
         $openSourceJson = $this->browseOpenSourceOnly ? 'true' : 'false';
+        $excludeOpenSourceJson = $this->browseExcludeOpenSource ? 'true' : 'false';
         $hideInstalledJson = $this->browseHideInstalled ? 'true' : 'false';
-        $filterDropdown = "<div wire:ignore x-data=\"{ open:false, px:0, py:0, cats:{$catsJson}, envs:{$envJson}, openSource:{$openSourceJson}, hideInstalled:{$hideInstalledJson}, catOpen:true, envOpen:true, licenseOpen:true, toggle(list, value){ const i=list.indexOf(value); i === -1 ? list.push(value) : list.splice(i, 1); }, activeCount(){ return this.cats.length + this.envs.length + (this.openSource ? 1 : 0) + (this.hideInstalled ? 1 : 0); } }\" style='display:inline-flex;'>"
+        $filterDropdown = "<div wire:ignore x-data=\"{ open:false, px:0, py:0, cats:{$catsJson}, excCats:{$excCatsJson}, envs:{$envJson}, excEnvs:{$excEnvJson}, openSource:{$openSourceJson}, excludeOpenSource:{$excludeOpenSourceJson}, hideInstalled:{$hideInstalledJson}, catOpen:true, envOpen:true, licenseOpen:true, remove(list, value){ const i=list.indexOf(value); if(i !== -1) list.splice(i, 1); }, selectFacet(list, other, value){ const i=list.indexOf(value); this.remove(other, value); i === -1 ? list.push(value) : list.splice(i, 1); }, excludeFacet(list, other, value){ const i=list.indexOf(value); this.remove(other, value); i === -1 ? list.push(value) : list.splice(i, 1); }, activeCount(){ return this.cats.length + this.excCats.length + this.envs.length + this.excEnvs.length + (this.openSource ? 1 : 0) + (this.excludeOpenSource ? 1 : 0) + (this.hideInstalled ? 1 : 0); } }\" style='display:inline-flex;'>"
             . "<button type='button' x-ref='bfilterbtn' x-on:click.stop=\"if(!open){let r=\$refs.bfilterbtn.getBoundingClientRect();py=r.bottom+6;px=Math.max(8, Math.min(window.innerWidth-300, r.right-292));} open=!open\" "
             . "style=\"{$ddBtn}height:40px;padding:0 12px;\" {$ddBtnHov}>{$filterSvg}<span>Filters</span>"
             . "<span x-show='activeCount() > 0' x-cloak x-text='activeCount()' style='display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#1bd96a;color:#102016;font-size:11px;font-weight:800;'></span>"
             . "</button>"
             . "<template x-teleport='body'><div x-show='open' x-cloak x-on:click.away='open=false' class='pmm-browse-filter-panel' "
-            . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;z-index:9999;'\">"
-            . "<button type='button' class='pmm-browse-filter-toggle' wire:click='toggleBrowseHideInstalled' x-on:click='hideInstalled=!hideInstalled'>"
+            . ":style=\"'position:fixed;top:'+py+'px;left:'+px+'px;max-height:calc(100vh - '+(py+8)+'px);z-index:9999;'\">"
+            . "<button type='button' class='pmm-browse-filter-toggle' x-on:click=\"hideInstalled=!hideInstalled; \$wire.call('toggleBrowseHideInstalled')\">"
             . "<span>Hide already installed content</span><span class='pmm-browse-mini-switch' :class=\"hideInstalled ? 'pmm-browse-mini-switch-on' : ''\"></span></button>"
             . "<div class='pmm-browse-filter-section'><button type='button' class='pmm-browse-filter-title' x-on:click='catOpen=!catOpen' style='width:100%;padding:0;background:transparent;border:0;cursor:pointer;text-align:left;'>"
             . "<span>Category</span><span x-show='catOpen'>{$chevSvg}</span><span x-show='!catOpen' x-cloak style='transform:rotate(180deg)'>{$chevSvg}</span></button>"
@@ -3848,8 +4003,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             . "<div x-show='envOpen' x-cloak>{$environmentItems}</div></div>"
             . "<div class='pmm-browse-filter-section'><button type='button' class='pmm-browse-filter-title' x-on:click='licenseOpen=!licenseOpen' style='width:100%;padding:0;background:transparent;border:0;cursor:pointer;text-align:left;'>"
             . "<span>License</span><span x-show='licenseOpen'>{$chevSvg}</span><span x-show='!licenseOpen' x-cloak style='transform:rotate(180deg)'>{$chevSvg}</span></button>"
-            . "<div x-show='licenseOpen' x-cloak><button type='button' class='pmm-browse-facet' wire:click='toggleBrowseOpenSourceFilter' x-on:click='openSource=!openSource' :class=\"openSource ? 'pmm-browse-facet-active' : ''\">"
-            . "<span class='pmm-browse-facet-left'><span style='width:14px;display:inline-block'></span><span>Open source</span></span><span x-show='openSource' x-cloak>{$panelCheckSvg}</span></button></div></div>"
+            . "<div x-show='licenseOpen' x-cloak><div class='pmm-browse-facet-row' :class=\"excludeOpenSource ? 'pmm-browse-facet-excluded' : ''\">"
+            . "<button type='button' class='pmm-browse-facet-choice' "
+            . "x-on:click=\"openSource=!openSource; if(openSource) excludeOpenSource=false; \$wire.call('toggleBrowseOpenSourceFilter')\" :class=\"openSource ? 'pmm-browse-facet-active' : ''\">"
+            . "<span class='pmm-browse-facet-left'>{$openSourceIcon}<span>Open source</span></span>"
+            . "<span x-show='openSource' x-cloak>{$panelCheckSvg}</span>"
+            . "<span x-show='!openSource && !excludeOpenSource' x-cloak class='pmm-browse-facet-check-hover'>{$panelCheckSvg}</span></button>"
+            . "<button type='button' class='pmm-browse-facet-exclude' "
+            . "x-on:click.stop=\"excludeOpenSource=!excludeOpenSource; if(excludeOpenSource) openSource=false; \$wire.call('toggleBrowseExcludeOpenSourceFilter')\">{$slashSvg}<span>Exclude</span></button>"
+            . "</div></div></div>"
             . "</div></template></div>";
 
         $searchBar = "<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px;'>"

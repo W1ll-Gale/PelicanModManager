@@ -3003,7 +3003,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
             }
-            $this->installedHasDisabled = $currentlyEnabled ? true : $this->installedHasDisabled;
+            $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid);
+            if (!is_array($resolvedItems)) {
+                $resolvedItems = cache()->get("pmm_basic_installed_{$server->uuid}", []);
+            }
+            $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
+                ->contains(fn ($item) => !empty($item['is_disabled']));
+            if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
+                $this->installedStatusFilter = 'all';
+            }
 
             Notification::make()
                 ->title('Mod status updated')
@@ -3255,10 +3263,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $hBtnHov   = " onmouseover=\"this.style.background='rgba(255,255,255,0.09)'\" onmouseout=\"this.style.background='rgba(255,255,255,0.04)'\"";
         $uploadSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='16 16 12 12 8 16'/><line x1='12' y1='12' x2='12' y2='21'/><path d='M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3'/></svg>";
         $exportSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
+        $folderSvg = "<svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'/></svg>";
         $row1 = "<div style='display:flex;align-items:center;gap:10px;margin-bottom:10px;'>"
             . $searchInput
             . "<button type='button' wire:click=\"openUploadModal\" style=\"{$hBtnBase}\"{$hBtnHov}>{$uploadSvg}Upload files</button>"
             . "<button type='button' wire:click=\"mountAction('export_modpack')\" style=\"{$hBtnBase}\"{$hBtnHov}>{$exportSvg}Export modpack</button>"
+            . "<a href=\"{$folderUrl}\" style=\"{$hBtnBase}\"{$hBtnHov}>{$folderSvg}View folder</a>"
             . "</div>";
 
         // ── Row 2: filter icon + chips + sort (left) | Update all + Refresh (right) ──
@@ -3598,6 +3608,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $type = ModrinthProjectType::fromServer($server);
         if (!$type) return;
 
+        $previousUpdateProjectIds = array_keys($this->installedUpdateProjectIds);
+        if (empty($previousUpdateProjectIds)) {
+            $cachedUpdateProjectIds = cache()->get("pmm_update_project_ids_{$server->uuid}", []);
+            $previousUpdateProjectIds = is_array($cachedUpdateProjectIds) ? $cachedUpdateProjectIds : [];
+        }
+
         foreach ($this->getInstalledModsMetadata() as $mod) {
             cache()->forget("pmm_versions_{$mod['project_id']}_{$server->uuid}");
         }
@@ -3619,6 +3635,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->toArray();
 
         $updateProjectIds = [];
+        $checkedProjectIds = [];
         $metadataByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
         foreach (array_chunk($metadataIds, $this->installedUpdateCheckBatchSize) as $batchIds) {
             $this->warmVersionsCacheParallel($server, $batchIds);
@@ -3626,19 +3643,31 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             foreach ($batchIds as $projectId) {
                 $meta = $metadataByProjectId->get($projectId) ?? $this->getInstalledMod($projectId);
                 $versions = $this->getCachedVersions($projectId);
+                if (!empty($versions)) {
+                    $checkedProjectIds[] = $projectId;
+                }
                 if ($meta && !empty($versions) && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
                     $updateProjectIds[] = $projectId;
                 }
             }
         }
 
+        $missingProjectIds = array_values(array_diff($metadataIds, $checkedProjectIds));
+        if (!empty($missingProjectIds)) {
+            $updateProjectIds = array_values(array_unique(array_merge(
+                $updateProjectIds,
+                array_intersect($previousUpdateProjectIds, $missingProjectIds)
+            )));
+        }
+        $updateCheckComplete = empty($missingProjectIds);
+
         $this->installedEnriched = true;
         $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
         $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
-        $this->installedUpdatesChecked = true;
+        $this->installedUpdatesChecked = $updateCheckComplete;
         $this->installedUpdateCheckCursor = count($metadataIds);
         cache()->put("pmm_update_project_ids_{$server->uuid}", $updateProjectIds, now()->addMinutes(5));
-        cache()->put("pmm_update_check_complete_{$server->uuid}", true, now()->addMinutes(5));
+        cache()->put("pmm_update_check_complete_{$server->uuid}", $updateCheckComplete, now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
     }
 

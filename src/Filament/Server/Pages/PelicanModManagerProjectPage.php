@@ -392,13 +392,44 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: inline-flex !important;
                     visibility: visible !important;
                     opacity: 1 !important;
-                    flex: 0 0 48px !important;
-                    width: 48px !important;
-                    min-width: 48px !important;
+                    position: relative !important;
+                    flex: 0 0 46px !important;
+                    width: 46px !important;
+                    min-width: 46px !important;
                     height: 24px !important;
                     min-height: 24px !important;
+                    padding: 0 !important;
+                    margin: 0 4px !important;
+                    border: 0 !important;
+                    border-radius: 9999px !important;
+                    background: var(--pmm-toggle-bg, #2f333d) !important;
                     appearance: none !important;
                     -webkit-appearance: none !important;
+                    transition: background-color 0.16s ease, opacity 0.16s ease !important;
+                }
+                .fi-ta-row .pmm-toggle-switch__knob {
+                    display: block !important;
+                    position: absolute !important;
+                    left: 3px !important;
+                    top: 3px !important;
+                    width: 18px !important;
+                    height: 18px !important;
+                    border-radius: 9999px !important;
+                    background: var(--pmm-toggle-knob-bg, #9aa4b2) !important;
+                    transform: translateX(var(--pmm-toggle-x, 0px)) !important;
+                    transition: transform 0.16s ease, background-color 0.16s ease !important;
+                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35) !important;
+                }
+                .fi-ta-row .pmm-toggle-switch:disabled {
+                    cursor: wait !important;
+                    opacity: 0.65 !important;
+                }
+                @keyframes pmm-spin {
+                    to { transform: rotate(360deg); }
+                }
+                .pmm-spin {
+                    animation: pmm-spin 0.7s linear infinite !important;
+                    transform-origin: center !important;
                 }
 
                 /* Filament actions td — hidden (actions are rendered inside td[4] HtmlString) */
@@ -1674,21 +1705,27 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         // without waiting for the Livewire round-trip (Wings API rename ~1-2s).
                         // Inline background is the CSS fallback so the toggle is visible even before
                         // Alpine initialises. Alpine's :style overrides it once it boots.
-                        $toggleBg = $isEnabled ? '#1BD96A' : '#27272a';
-                        $toggleKnobLeft = $isEnabled ? '26px' : '2px';
+                        $toggleBg = $isEnabled ? '#1BD96A' : '#2f333d';
+                        $toggleKnobBg = $isEnabled ? '#03150A' : '#9aa4b2';
+                        $toggleX = $isEnabled ? '22px' : '0px';
                         $toggleHtml = "
                             <button type='button'
                                  class='pmm-toggle-switch'
-                                 x-data=\"{ on: {$isEnabledJs} }\"
+                                 x-data=\"{ on: {$isEnabledJs}, busy: false }\"
                                  data-pmm-project-id=\"{$projectId}\"
                                  data-pmm-filename=\"{$filename}\"
                                  title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
                                  aria-label='" . ($isEnabled ? 'Disable mod' : 'Enable mod') . "'
-                                 style='display:inline-flex !important; cursor:pointer; position:relative; flex:0 0 48px; width:48px !important; min-width:48px !important; max-width:48px !important; height:24px !important; min-height:24px !important; padding:0 !important; margin:0 4px !important; border:0 !important; outline:none !important; border-radius:9999px; transition:background 0.2s ease-in-out; background:{$toggleBg}; vertical-align:middle; align-items:center;'
-                                 :style=\"'background:' + (on ? '#1BD96A' : '#27272a')\"
-                                 x-on:click.stop=\"let wasOn=on; on=!on; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn)\">
-                                <span style='display:block !important; position:absolute; top:2px; left:{$toggleKnobLeft}; width:20px !important; height:20px !important; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
-                                     :style=\"'left:' + (on ? '26px' : '2px')\"></span>
+                                 style='--pmm-toggle-bg: {$toggleBg}; --pmm-toggle-knob-bg: {$toggleKnobBg}; --pmm-toggle-x: {$toggleX}; cursor:pointer; outline:none !important; vertical-align:middle; align-items:center;'
+                                 x-bind:disabled=\"busy\"
+                                 x-bind:aria-busy=\"busy ? 'true' : 'false'\"
+                                 x-bind:style=\"{
+                                    '--pmm-toggle-bg': on ? '#1BD96A' : '#2f333d',
+                                    '--pmm-toggle-knob-bg': on ? '#03150A' : '#9aa4b2',
+                                    '--pmm-toggle-x': on ? '22px' : '0px'
+                                 }\"
+                                 x-on:click.stop=\"if (busy) return; let wasOn=on; on=!on; busy=true; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn).then(() => { busy=false }).catch(() => { on=wasOn; busy=false })\">
+                                <span class='pmm-toggle-switch__knob'></span>
                             </button>";
 
                         // SVG icons for dropdown items and buttons
@@ -2888,11 +2925,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         try {
             /** @var Server $server */
             $server = Filament::getTenant();
-            cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-            cache()->forget("pmm_basic_installed_{$server->uuid}");
-            $this->installedEnriched = false;
-            $this->installedUpdatesChecked = false;
-            $this->installedUpdateCheckCursor = 0;
 
             $type = ModrinthProjectType::fromServer($server);
             if (!$type) {
@@ -2941,6 +2973,36 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             // The Alpine optimistic toggle already flipped the visual state instantly.
             $this->invalidateMetadataCache();
             $this->versionsCache = [];
+
+            foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+                $cacheKey = $prefix . $server->uuid;
+                $cachedItems = cache()->get($cacheKey);
+                if (!is_array($cachedItems)) continue;
+
+                $cachedItems = array_map(function (array $item) use ($projectId, $oldFilename, $newFilename, $currentlyEnabled) {
+                    $sameProject = ($item['project_id'] ?? null) === $projectId;
+                    $sameFile = strcasecmp($item['filename'] ?? '', $oldFilename) === 0;
+                    if (!$sameProject && !$sameFile) {
+                        return $item;
+                    }
+
+                    $item['filename'] = $newFilename;
+                    $item['is_disabled'] = $currentlyEnabled;
+                    if (str_starts_with($projectId, 'local_')) {
+                        $cleanFilename = str_replace('.disabled', '', $newFilename);
+                        $item['project_id'] = 'local_' . md5($newFilename);
+                        $item['title'] = basename($cleanFilename, '.jar');
+                    }
+                    if (isset($item['metadata']) && is_array($item['metadata'])) {
+                        $item['metadata']['filename'] = $newFilename;
+                    }
+
+                    return $item;
+                }, $cachedItems);
+
+                cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
+            }
+            $this->installedHasDisabled = $currentlyEnabled ? true : $this->installedHasDisabled;
 
             Notification::make()
                 ->title('Mod status updated')
@@ -3257,9 +3319,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 . "Update all</button>";
         }
         $rightBtns .= "<button type='button' wire:click='refreshInstalled' "
+            . "wire:loading.attr='disabled' wire:target='refreshInstalled' "
             . "style='display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;background:transparent;color:#a1a1aa;border:1px solid rgba(255,255,255,0.12);transition:all 0.15s ease;' "
             . "onmouseover=\"this.style.color='#ffffff';this.style.borderColor='rgba(255,255,255,0.25)'\" onmouseout=\"this.style.color='#a1a1aa';this.style.borderColor='rgba(255,255,255,0.12)'\">"
-            . "<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='1 4 1 10 7 10'/><path d='M3.51 15a9 9 0 1 0 .49-4.95L1 10'/></svg>"
+            . "<svg class='pmm-refresh-icon' wire:loading.class='pmm-spin' wire:target='refreshInstalled' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='1 4 1 10 7 10'/><path d='M3.51 15a9 9 0 1 0 .49-4.95L1 10'/></svg>"
             . "Refresh</button>";
 
         $row2 = "<div style='display:flex;align-items:center;justify-content:space-between;'>"

@@ -388,6 +388,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: contents !important;
                     width: auto !important;
                 }
+                .fi-ta-row .pmm-toggle-switch {
+                    display: inline-flex !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    flex: 0 0 48px !important;
+                    width: 48px !important;
+                    min-width: 48px !important;
+                    height: 24px !important;
+                    min-height: 24px !important;
+                    appearance: none !important;
+                    -webkit-appearance: none !important;
+                }
 
                 /* Filament actions td — hidden (actions are rendered inside td[4] HtmlString) */
                 .fi-ta-row > td:has(.fi-ta-actions),
@@ -1663,18 +1675,21 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         // Inline background is the CSS fallback so the toggle is visible even before
                         // Alpine initialises. Alpine's :style overrides it once it boots.
                         $toggleBg = $isEnabled ? '#1BD96A' : '#27272a';
-                        $toggleKnobLeft = $isEnabled ? '22px' : '2px';
+                        $toggleKnobLeft = $isEnabled ? '26px' : '2px';
                         $toggleHtml = "
-                            <div x-data=\"{ on: {$isEnabledJs} }\"
+                            <button type='button'
+                                 class='pmm-toggle-switch'
+                                 x-data=\"{ on: {$isEnabledJs} }\"
                                  data-pmm-project-id=\"{$projectId}\"
                                  data-pmm-filename=\"{$filename}\"
                                  title='" . ($isEnabled ? 'Disable' : 'Enable') . "'
-                                 style='cursor:pointer; position:relative; flex-shrink:0; width:44px; height:24px; border-radius:9999px; transition:background 0.2s ease-in-out; background:{$toggleBg};'
+                                 aria-label='" . ($isEnabled ? 'Disable mod' : 'Enable mod') . "'
+                                 style='display:inline-flex !important; cursor:pointer; position:relative; flex:0 0 48px; width:48px !important; min-width:48px !important; max-width:48px !important; height:24px !important; min-height:24px !important; padding:0 !important; margin:0 4px !important; border:0 !important; outline:none !important; border-radius:9999px; transition:background 0.2s ease-in-out; background:{$toggleBg}; vertical-align:middle; align-items:center;'
                                  :style=\"'background:' + (on ? '#1BD96A' : '#27272a')\"
                                  x-on:click.stop=\"let wasOn=on; on=!on; \$wire.toggleModStatus(\$el.dataset.pmmProjectId, \$el.dataset.pmmFilename, wasOn)\">
-                                <div style='position:absolute; top:2px; left:{$toggleKnobLeft}; width:20px; height:20px; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
-                                     :style=\"'left:' + (on ? '22px' : '2px')\"></div>
-                            </div>";
+                                <span style='display:block !important; position:absolute; top:2px; left:{$toggleKnobLeft}; width:20px !important; height:20px !important; background:#03150A; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:left 0.2s ease-in-out;'
+                                     :style=\"'left:' + (on ? '26px' : '2px')\"></span>
+                            </button>";
 
                         // SVG icons for dropdown items and buttons
                         $trashSvg  = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='3 6 5 6 21 6'/><path d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2'/></svg>";
@@ -3516,9 +3531,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     {
         /** @var Server $server */
         $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) return;
+
         foreach ($this->getInstalledModsMetadata() as $mod) {
             cache()->forget("pmm_versions_{$mod['project_id']}_{$server->uuid}");
         }
+
         $this->invalidateMetadataCache();
         $this->versionsCache = [];
         cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
@@ -3526,12 +3545,36 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->forget("pmm_has_updates_{$server->uuid}");
         cache()->forget("pmm_update_project_ids_{$server->uuid}");
         cache()->forget("pmm_update_check_complete_{$server->uuid}");
-        $this->installedEnriched = false;
-        $this->installedUpdateProjectIds = [];
-        $this->installedHasUpdates = false;
-        $this->installedUpdatesChecked = false;
-        $this->installedUpdateCheckCursor = 0;
 
+        $items = $this->getInstalledModsResolvedList($server, $type);
+        $metadataIds = collect($this->getInstalledModsMetadata())
+            ->pluck('project_id')
+            ->filter(fn ($id) => !str_starts_with($id, 'local_'))
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $this->warmVersionsCacheParallel($server, $metadataIds);
+
+        $updateProjectIds = [];
+        $itemsByProjectId = collect($items)->keyBy('project_id');
+        foreach ($metadataIds as $projectId) {
+            $item = $itemsByProjectId->get($projectId);
+            $meta = $item['metadata'] ?? $this->getInstalledMod($projectId);
+            $versions = $this->getCachedVersions($projectId);
+            if ($meta && !empty($versions) && ($meta['version_id'] ?? '') !== ($versions[0]['id'] ?? '')) {
+                $updateProjectIds[] = $projectId;
+            }
+        }
+
+        $this->installedEnriched = true;
+        $this->installedUpdateProjectIds = array_fill_keys($updateProjectIds, true);
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        $this->installedUpdatesChecked = true;
+        $this->installedUpdateCheckCursor = count($metadataIds);
+        cache()->put("pmm_update_project_ids_{$server->uuid}", $updateProjectIds, now()->addMinutes(5));
+        cache()->put("pmm_update_check_complete_{$server->uuid}", true, now()->addMinutes(5));
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
     }
 
     public function updateAllMods(): void

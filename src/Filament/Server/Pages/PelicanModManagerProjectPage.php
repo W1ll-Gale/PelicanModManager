@@ -69,7 +69,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /** @var array<string, bool> Project IDs known to have updates after the lazy background check. */
     public array $installedUpdateProjectIds = [];
     public int $installedUpdateCheckCursor = 0;
-    public int $installedUpdateCheckBatchSize = 10;
+    public int $installedUpdateCheckBatchSize = 20;
     public bool $installedDataReady = true;
     // Phase 2: Modrinth-enriched list (icons, author avatars) loaded in background
     public bool $installedEnriched = false;
@@ -329,7 +329,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 /* --- INSTALLED TAB CELLS --- */
 
                 /* Checkbox */
-                .fi-ta-row > td:first-child {
+                .fi-ta-row > td:first-child:has(input[type='checkbox']) {
                     display: flex !important;
                     flex-shrink: 0 !important;
                     width: auto !important;
@@ -339,6 +339,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
 
                 /* Mod — left half (equal flex with td[4] so Version sits in the middle) */
+                .fi-ta-row > td:first-child:not(:has(input[type='checkbox'])),
                 .fi-ta-row > td:nth-child(2) {
                     flex: 1 1 0 !important;
                     min-width: 0 !important;
@@ -346,7 +347,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
 
                 /* Version + filename — fixed-width centre column */
-                .fi-ta-row > td:nth-child(3) {
+                .fi-ta-row > td:nth-last-child(3) {
                     flex: 0 0 320px !important;
                     width: 320px !important;
                     align-self: center !important;
@@ -355,7 +356,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
 
                 /* All right-side controls (⇄/⬇ toggle 🗑 ⋮) — right half, content flushed right */
-                .fi-ta-row > td:nth-child(4) {
+                .fi-ta-row > td:nth-last-child(2) {
+                    flex: 1 1 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: flex-end !important;
+                    gap: 4px !important;
+                    overflow: visible !important;
+                }
+                .fi-ta-row > td:has([data-pmm-filename]) {
                     flex: 1 1 0 !important;
                     display: flex !important;
                     align-items: center !important;
@@ -365,16 +374,24 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
                 /* Override shared block layout inside the actions cell so the
                    flex container from formatStateUsing renders horizontally */
-                .fi-ta-row > td:nth-child(4) .fi-ta-col,
-                .fi-ta-row > td:nth-child(4) .fi-ta-text,
-                .fi-ta-row > td:nth-child(4) .fi-ta-text-item,
-                .fi-ta-row > td:nth-child(4) > a {
+                .fi-ta-row > td:nth-last-child(2) .fi-ta-col,
+                .fi-ta-row > td:nth-last-child(2) .fi-ta-text,
+                .fi-ta-row > td:nth-last-child(2) .fi-ta-text-item,
+                .fi-ta-row > td:nth-last-child(2) > a {
+                    display: contents !important;
+                    width: auto !important;
+                }
+                .fi-ta-row > td:has([data-pmm-filename]) .fi-ta-col,
+                .fi-ta-row > td:has([data-pmm-filename]) .fi-ta-text,
+                .fi-ta-row > td:has([data-pmm-filename]) .fi-ta-text-item,
+                .fi-ta-row > td:has([data-pmm-filename]) > a {
                     display: contents !important;
                     width: auto !important;
                 }
 
                 /* Filament actions td — hidden (actions are rendered inside td[4] HtmlString) */
-                .fi-ta-row > td:last-child {
+                .fi-ta-row > td:has(.fi-ta-actions),
+                .fi-ta-row > td:has(.fi-ac) {
                     display: none !important;
                 }
 
@@ -3488,7 +3505,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
 
         if (!$this->installedUpdatesChecked) {
-            $this->js("setTimeout(() => \$wire.call('checkInstalledUpdates'), 150)");
+            $this->js("setTimeout(() => \$wire.call('checkInstalledUpdates'), 75)");
         }
 
         return;

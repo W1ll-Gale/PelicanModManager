@@ -341,6 +341,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 box-shadow: none !important;
             }
 
+            div:has(> .pmm-selection-bar),
+            .fi-in-text:has(.pmm-selection-bar),
+            .fi-in-entry-wrp:has(.pmm-selection-bar) {
+                border: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                box-shadow: none !important;
+                min-height: 0 !important;
+            }
+
             .pmm-browse-filter-panel {
                 background: #1f2025;
                 border: 1px solid rgba(255,255,255,0.1);
@@ -629,6 +639,127 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             // td[1]=checkbox, td[2]=Mod, td[3]=Version, td[4]=⇄+Toggle, td[last]=🗑+⋮
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
+
+                .fi-ta-selection-indicator,
+                .fi-ta-bulk-actions {
+                    display: none !important;
+                }
+
+                .pmm-selection-bar {
+                    position: fixed;
+                    left: 50%;
+                    bottom: 18px;
+                    transform: translateX(-50%);
+                    z-index: 110;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    max-width: min(760px, calc(100vw - 32px));
+                    padding: 10px 12px;
+                    border-radius: 20px;
+                    border: 1px solid rgba(255,255,255,0.14);
+                    background: #202127;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35);
+                }
+
+                .pmm-selection-avatars {
+                    position: relative;
+                    height: 32px;
+                    flex: 0 0 auto;
+                }
+
+                .pmm-selection-avatar {
+                    position: absolute;
+                    top: 0;
+                    width: 32px;
+                    height: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    overflow: hidden;
+                    border-radius: 8px;
+                    border: 1.5px solid #202127;
+                    background: #2a2b32;
+                    color: #f4f4f5;
+                    font-size: 11px;
+                    font-weight: 800;
+                }
+
+                .pmm-selection-avatar img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                }
+
+                .pmm-selection-count {
+                    color: #f4f4f5;
+                    font-size: 15px;
+                    font-weight: 800;
+                    white-space: nowrap;
+                    font-variant-numeric: tabular-nums;
+                }
+
+                .pmm-selection-divider {
+                    width: 1px;
+                    height: 24px;
+                    background: rgba(255,255,255,0.12);
+                    margin: 0 4px;
+                    flex-shrink: 0;
+                }
+
+                .pmm-selection-actions {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    margin-left: auto;
+                }
+
+                .pmm-selection-button {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    height: 36px;
+                    padding: 0 10px;
+                    border: 0;
+                    border-radius: 12px;
+                    background: transparent;
+                    color: #d4d4d8;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 700;
+                    transition: background-color 0.12s ease, color 0.12s ease;
+                }
+
+                .pmm-selection-button:hover {
+                    background: rgba(255,255,255,0.08);
+                    color: #ffffff;
+                }
+
+                .pmm-selection-button-danger {
+                    color: #f87171;
+                }
+
+                .pmm-selection-button-danger:hover {
+                    background: #ef4444;
+                    color: #ffffff;
+                }
+
+                @media (max-width: 640px) {
+                    .pmm-selection-bar {
+                        left: 12px;
+                        right: 12px;
+                        transform: none;
+                        max-width: none;
+                    }
+
+                    .pmm-selection-count {
+                        font-size: 13px;
+                    }
+
+                    .pmm-selection-button span {
+                        display: none;
+                    }
+                }
 
                 /* Checkbox */
                 .fi-ta-row > td:first-child:has(input[type='checkbox']) {
@@ -2583,60 +2714,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->visible(fn () => $this->activeTab === 'installed')
                     ->action(function (\Illuminate\Support\Collection $records) {
                         try {
-                            /** @var Server $server */
-                            $server = Filament::getTenant();
-
-                            $type = ModrinthProjectType::fromServer($server);
-                            if (!$type) {
-                                throw new Exception('Server does not support Modrinth mods or plugins');
-                            }
-
-                            $folder = $type->getFolder();
-                            $filesToDelete = [];
-                            $projectIdsToRemove = [];
-                            $filenamesToRemove = [];
-
-                            foreach ($records as $record) {
-                                if (!empty($record['is_local'])) {
-                                    $filename = $record['filename'];
-                                } else {
-                                    $installedMod = $this->getInstalledMod($record['project_id']);
-                                    if ($installedMod) {
-                                        $filename = $installedMod['filename'];
-                                        $projectIdsToRemove[] = $record['project_id'];
-                                    } else {
-                                        $filename = $record['filename'] ?? null;
-                                    }
-                                }
-
-                                if ($filename) {
-                                    $filesToDelete[] = $folder . '/' . $this->validateFilename($filename);
-                                    $filenamesToRemove[] = $filename;
-                                }
-                            }
-
-                            if (!empty($filesToDelete)) {
-                                Http::daemon($server->node)
-                                    ->post("/api/servers/{$server->uuid}/files/delete", [
-                                        'root' => '/',
-                                        'files' => $filesToDelete,
-                                    ])
-                                    ->throw();
-                            }
-
-                            foreach ($projectIdsToRemove as $pId) {
-                                PelicanModManager::removeModMetadata($server, $pId);
-                            }
-
-                            $this->invalidateMetadataCache();
-                            $this->versionsCache = [];
-                            $this->removeInstalledRowsFromCaches($server, $projectIdsToRemove, $filenamesToRemove);
-
-                            Notification::make()
-                                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
-                                ->body('Successfully uninstalled selected mods.')
-                                ->success()
-                                ->send();
+                            $this->uninstallInstalledRecords($records);
                         } catch (Exception $e) {
                             report($e);
                             Notification::make()
@@ -3294,6 +3372,97 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         Notification::make()->title('Link copied!')->success()->send();
     }
 
+    public function clearInstalledSelection(): void
+    {
+        if (method_exists($this, 'deselectAllTableRecords')) {
+            $this->deselectAllTableRecords();
+            return;
+        }
+
+        $this->selectedTableRecords = [];
+    }
+
+    public function uninstallSelectedInstalledMods(): void
+    {
+        try {
+            $records = method_exists($this, 'getSelectedTableRecords')
+                ? $this->getSelectedTableRecords()
+                : collect();
+
+            if ($records->isEmpty()) {
+                return;
+            }
+
+            $this->uninstallInstalledRecords($records);
+        } catch (Exception $e) {
+            report($e);
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    protected function uninstallInstalledRecords(\Illuminate\Support\Collection $records): void
+    {
+        /** @var Server $server */
+        $server = Filament::getTenant();
+
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) {
+            throw new Exception('Server does not support Modrinth mods or plugins');
+        }
+
+        $folder = $type->getFolder();
+        $filesToDelete = [];
+        $projectIdsToRemove = [];
+        $filenamesToRemove = [];
+
+        foreach ($records as $record) {
+            if (!empty($record['is_local'])) {
+                $filename = $record['filename'];
+            } else {
+                $installedMod = $this->getInstalledMod($record['project_id']);
+                if ($installedMod) {
+                    $filename = $installedMod['filename'];
+                    $projectIdsToRemove[] = $record['project_id'];
+                } else {
+                    $filename = $record['filename'] ?? null;
+                }
+            }
+
+            if ($filename) {
+                $filesToDelete[] = $folder . '/' . $this->validateFilename($filename);
+                $filenamesToRemove[] = $filename;
+            }
+        }
+
+        if (!empty($filesToDelete)) {
+            Http::daemon($server->node)
+                ->post("/api/servers/{$server->uuid}/files/delete", [
+                    'root' => '/',
+                    'files' => $filesToDelete,
+                ])
+                ->throw();
+        }
+
+        foreach ($projectIdsToRemove as $pId) {
+            PelicanModManager::removeModMetadata($server, $pId);
+        }
+
+        $this->invalidateMetadataCache();
+        $this->versionsCache = [];
+        $this->removeInstalledRowsFromCaches($server, $projectIdsToRemove, $filenamesToRemove);
+        $this->clearInstalledSelection();
+
+        Notification::make()
+            ->title(trans('pelican-mod-manager::strings.notifications.uninstall_success'))
+            ->body('Successfully uninstalled selected mods.')
+            ->success()
+            ->send();
+    }
+
     public function installMod(string $projectId, string $slug = '', string $title = '', string $author = ''): void
     {
         try {
@@ -3739,7 +3908,71 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->hidden(fn () => $this->activeTab !== 'installed' || !$this->installedDataReady)
                     ->state(fn () => new HtmlString($this->renderInstalledFilterBar())),
                 EmbeddedTable::make(),
+                TextEntry::make('installed_selection_bar')
+                    ->hiddenLabel()
+                    ->hidden(fn () => $this->activeTab !== 'installed')
+                    ->state(fn () => new HtmlString($this->renderInstalledSelectionBar())),
             ]);
+    }
+
+    protected function renderInstalledSelectionBar(): string
+    {
+        $selectedIds = array_values($this->selectedTableRecords ?? []);
+        $selectedCount = count($selectedIds);
+        if ($selectedCount === 0) {
+            return '';
+        }
+
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        $items = $type
+            ? cache()->get("modrinth_installed_resolved_list_" . $server->uuid, $this->getMetadataOnlyList())
+            : $this->getMetadataOnlyList();
+        $itemsById = collect(is_array($items) ? $items : [])->keyBy('project_id');
+
+        $avatars = '';
+        $maxAvatars = min(3, $selectedCount);
+        for ($i = 0; $i < $maxAvatars; $i++) {
+            $id = $selectedIds[$i] ?? null;
+            $item = $id ? $itemsById->get($id) : null;
+            $title = e($item['title'] ?? 'Selected mod');
+            $icon = $item['icon_url'] ?? null;
+            $left = $i * 24;
+            $z = $maxAvatars - $i;
+            $content = $icon
+                ? "<img src='" . e($icon) . "' alt='{$title}' loading='eager'>"
+                : e(strtoupper(substr($item['title'] ?? '?', 0, 1)));
+            $avatars .= "<div class='pmm-selection-avatar' title='{$title}' style='left:{$left}px;z-index:{$z};'>{$content}</div>";
+        }
+        if ($selectedCount > 3) {
+            $left = 72;
+            $extra = $selectedCount - 3;
+            $avatars .= "<div class='pmm-selection-avatar' style='left:{$left}px;z-index:0;'>+{$extra}</div>";
+        }
+        $avatarWidth = $selectedCount > 3 ? 104 : max(32, $maxAvatars * 24 + 8);
+
+        $label = $selectedCount === 1 ? '1 mod selected' : "{$selectedCount} mods selected";
+        $xSvg = "<svg width='18' height='18' viewBox='0 0 20 20' fill='currentColor'><path fill-rule='evenodd' d='M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 1 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414' clip-rule='evenodd'/></svg>";
+        $trashSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6'/></svg>";
+
+        return <<<HTML
+            <div class="pmm-selection-bar" role="toolbar" aria-label="Selection actions">
+                <div class="pmm-selection-avatars" style="width: {$avatarWidth}px;">{$avatars}</div>
+                <span class="pmm-selection-count">{$label}</span>
+                <div class="pmm-selection-divider"></div>
+                <button type="button" class="pmm-selection-button" wire:click="clearInstalledSelection">
+                    {$xSvg}<span>Clear</span>
+                </button>
+                <div class="pmm-selection-actions">
+                    <button type="button" class="pmm-selection-button pmm-selection-button-danger"
+                        x-data
+                        x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallSelectedInstalledMods() }">
+                        {$trashSvg}<span>Delete</span>
+                    </button>
+                </div>
+            </div>
+        HTML;
     }
 
     protected function renderInstalledFilterBar(): string
@@ -4222,6 +4455,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     public function updatedActiveTab(): void
     {
+        $this->resetUrlBackedStateForTabChange();
         $this->syncActiveTabPath();
 
         if ($this->activeTab === 'installed') {
@@ -4238,6 +4472,27 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         }
     }
 
+    protected function resetUrlBackedStateForTabChange(): void
+    {
+        $this->browseSearch = '';
+        $this->browseSortMode = 'relevance';
+        $this->browsePageSize = 20;
+        $this->browseCurrentPage = 1;
+        $this->browseCategoryFilters = [];
+        $this->browseExcludedCategoryFilters = [];
+        $this->browseEnvironmentFilters = [];
+        $this->browseExcludedEnvironmentFilters = [];
+        $this->browseOpenSourceOnly = false;
+        $this->browseExcludeOpenSource = false;
+        $this->browseHideInstalled = false;
+
+        $this->installedSearch = '';
+        $this->installedStatusFilter = 'all';
+        $this->installedSortMode = 'alpha_asc';
+
+        $this->gotoPage(1);
+    }
+
     protected function syncActiveTabPath(): void
     {
         $tab = in_array($this->activeTab, ['installed', 'browse'], true) ? $this->activeTab : 'installed';
@@ -4250,6 +4505,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 } else {
                     url.pathname = url.pathname.replace(/\\/?$/, replacement);
                 }
+                url.search = '';
                 window.history.replaceState({}, '', url);
             })()
         JS);

@@ -4222,6 +4222,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         if (!livewire?.find) return null;
 
                         const ids = [];
+                        const pageId = bar?.getAttribute?.('data-pmm-page-wire-id');
+                        if (pageId) ids.push(pageId);
                         const nearestId = bar?.closest?.('[wire\\:id]')?.getAttribute?.('wire:id');
                         if (nearestId) ids.push(nearestId);
 
@@ -4657,11 +4659,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $projectLinksSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>";
         $markdownLinksSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m16 18 6-6-6-6M8 6l-6 6 6 6'/></svg>";
         $exportSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
+        $pageWireId = method_exists($this, 'getId') ? e((string) $this->getId()) : '';
 
         return <<<HTML
             <div
                 class="pmm-selection-bar"
                 data-pmm-selection-bar
+                data-pmm-page-wire-id="{$pageWireId}"
                 data-pmm-items="{$itemsJson}"
                 role="toolbar"
                 aria-label="Selection actions"

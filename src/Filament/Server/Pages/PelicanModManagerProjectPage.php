@@ -104,6 +104,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public bool $installedEnriched = false;
     /** @var string[] */
     public array $exportModpackProjectIds = [];
+    public string $installedBulkSelectionJson = '[]';
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
@@ -2954,6 +2955,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     FileUpload::make('file')
                         ->label(trans('pelican-mod-manager::strings.page.mod_file'))
                         ->preserveFilenames()
+                        ->getUploadedFileNameForStorageUsing(fn ($file) => $this->validateFilename($file->getClientOriginalName()))
                         ->required(),
                 ])
                 ->action(function (array $data) {
@@ -3052,6 +3054,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             } else {
                                 $this->addLocalInstalledRowToCaches($server, $type, $safeFilename);
                             }
+                            $this->installedDataReady = true;
+                            $this->installedEnriched = true;
+                            $this->rebuildInstalledCachesNow($server, $type);
                             Notification::make()->title(trans('pelican-mod-manager::strings.notifications.install_success'))
                                 ->body($resolved ? "Uploaded, verified and registered: {$projectName}" : "Uploaded as local mod: {$safeFilename}")->success()->send();
                         } else {
@@ -3578,6 +3583,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     public function clearInstalledSelection(): void
     {
+        $this->installedBulkSelectionJson = '[]';
+        $this->exportModpackProjectIds = [];
+
         if (method_exists($this, 'deselectAllTableRecords')) {
             $this->deselectAllTableRecords();
             return;
@@ -3589,7 +3597,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function uninstallSelectedInstalledMods(): void
     {
         try {
-            $records = $this->getSelectedInstalledRecordsForBulk();
+            $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
 
             if ($records->isEmpty()) {
                 return;
@@ -3635,7 +3643,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function setSelectedInstalledModsEnabled(bool $enabled): void
     {
         try {
-            $records = $this->getSelectedInstalledRecordsForBulk();
+            $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
 
             if ($records->isEmpty()) {
                 return;
@@ -3781,7 +3789,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function prepareSelectedModpackExport(): void
     {
         try {
-            $records = $this->getSelectedInstalledRecordsForBulk();
+            $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
 
             $this->exportModpackProjectIds = $records
                 ->pluck('project_id')
@@ -3797,6 +3805,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    public function setInstalledBulkSelection(string $idsJson): void
+    {
+        $this->installedBulkSelectionJson = $idsJson;
+    }
+
+    /** @return string[] */
+    protected function getInstalledBulkSelectionIds(): array
+    {
+        $decoded = json_decode($this->installedBulkSelectionJson, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        return collect($decoded)
+            ->filter(fn ($id) => is_string($id) && $id !== '')
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     protected function getSelectedInstalledRecordsForBulk(): \Illuminate\Support\Collection
@@ -4256,6 +4284,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         });
                         this.refresh();
                     },
+                    syncSelection(bar) {
+                        return this.call(bar, 'setInstalledBulkSelection', JSON.stringify(this.selected));
+                    },
                     bind() {
                         if (this.bound) return;
                         this.bound = true;
@@ -4280,7 +4311,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 event.preventDefault();
                                 if (shareFormat === 'export') {
                                     this.setMenuOpen(bar, false);
-                                    this.call(bar, 'prepareSelectedModpackExport')
+                                    this.syncSelection(bar)
+                                        .then(() => this.call(bar, 'prepareSelectedModpackExport'))
                                         .then(() => this.call(bar, 'mountAction', 'export_modpack'));
                                     return;
                                 }
@@ -4303,6 +4335,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             if (action === 'clear') {
                                 this.call(bar, 'clearInstalledSelection');
+                                this.call(bar, 'setInstalledBulkSelection', '[]');
                                 document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => {
                                     box.checked = false;
                                     box.indeterminate = false;
@@ -4316,12 +4349,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
                                 this.markSelected(bar, enabled);
-                                this.call(bar, 'setSelectedInstalledModsEnabled', enabled);
+                                this.syncSelection(bar)
+                                    .then(() => this.call(bar, 'setSelectedInstalledModsEnabled', enabled));
                                 return;
                             }
 
                             if (action === 'delete' && confirm('Uninstall selected mods?')) {
-                                this.call(bar, 'uninstallSelectedInstalledMods');
+                                this.syncSelection(bar)
+                                    .then(() => this.call(bar, 'uninstallSelectedInstalledMods'));
                             }
                         });
 

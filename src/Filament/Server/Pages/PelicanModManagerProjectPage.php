@@ -44,6 +44,23 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /** @var array<int, array{project_id: string, project_slug: string, project_title: string, version_id: string, version_number: string, filename: string, installed_at: string, author?: string}>|null */
     protected ?array $installedModsMetadata = null;
 
+    protected $queryString = [
+        'browseSearch' => ['as' => 'q', 'except' => ''],
+        'browseSortMode' => ['as' => 'sort', 'except' => 'relevance'],
+        'browsePageSize' => ['as' => 'per', 'except' => 20],
+        'browseCurrentPage' => ['as' => 'p', 'except' => 1],
+        'browseCategoryFilters' => ['as' => 'cat', 'except' => []],
+        'browseExcludedCategoryFilters' => ['as' => 'xcat', 'except' => []],
+        'browseEnvironmentFilters' => ['as' => 'env', 'except' => []],
+        'browseExcludedEnvironmentFilters' => ['as' => 'xenv', 'except' => []],
+        'browseOpenSourceOnly' => ['as' => 'open', 'except' => false],
+        'browseExcludeOpenSource' => ['as' => 'xopen', 'except' => false],
+        'browseHideInstalled' => ['as' => 'hideInstalled', 'except' => false],
+        'installedSearch' => ['as' => 'iq', 'except' => ''],
+        'installedStatusFilter' => ['as' => 'ifilter', 'except' => 'all'],
+        'installedSortMode' => ['as' => 'isort', 'except' => 'alpha_asc'],
+    ];
+
     /** @var array<string, array<int, mixed>> Cache for version data by project_id */
     protected array $versionsCache = [];
 
@@ -87,7 +104,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
-    protected static ?string $slug = 'mods';
+    protected static ?string $slug = 'mods/{modTab?}';
 
     protected static ?int $navigationSort = 30;
 
@@ -124,9 +141,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         return static::getNavigationLabel();
     }
 
-    public function mount(): void
+    public function mount(?string $modTab = null): void
     {
-        $this->loadDefaultActiveTab();
+        if (in_array($modTab, ['installed', 'browse'], true)) {
+            $this->activeTab = $modTab;
+        }
+
+        $this->normalizeUrlBackedState();
 
         /** @var Server $server */
         $server = Filament::getTenant();
@@ -136,6 +157,65 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
             $this->installedUpdatesChecked = cache()->get("pmm_update_check_complete_{$server->uuid}", false) === true;
         }
+
+        if ($this->activeTab === 'browse' && $this->browseCurrentPage > 1) {
+            $this->gotoPage($this->browseCurrentPage);
+        }
+    }
+
+    protected function normalizeUrlBackedState(): void
+    {
+        if (!in_array($this->activeTab ?? null, ['installed', 'browse'], true)) {
+            $this->activeTab = 'installed';
+        }
+
+        $allowedPageSizes = [5, 10, 15, 20, 50, 100];
+        if (!in_array($this->browsePageSize, $allowedPageSizes, true)) {
+            $this->browsePageSize = 20;
+        }
+        $this->browseCurrentPage = max(1, (int) $this->browseCurrentPage);
+
+        $categoryOptions = array_keys($this->getBrowseCategoryOptions());
+        $this->browseCategoryFilters = $this->sanitizeUrlArray($this->browseCategoryFilters, $categoryOptions);
+        $this->browseExcludedCategoryFilters = array_values(array_diff(
+            $this->sanitizeUrlArray($this->browseExcludedCategoryFilters, $categoryOptions),
+            $this->browseCategoryFilters
+        ));
+
+        $environmentOptions = ['client', 'server'];
+        $this->browseEnvironmentFilters = $this->sanitizeUrlArray($this->browseEnvironmentFilters, $environmentOptions);
+        $this->browseExcludedEnvironmentFilters = array_values(array_diff(
+            $this->sanitizeUrlArray($this->browseExcludedEnvironmentFilters, $environmentOptions),
+            $this->browseEnvironmentFilters
+        ));
+
+        if (!in_array($this->browseSortMode, ['relevance', 'downloads', 'follows', 'newest', 'updated'], true)) {
+            $this->browseSortMode = 'relevance';
+        }
+        if (!in_array($this->installedStatusFilter, ['all', 'enabled', 'disabled', 'updates'], true)) {
+            $this->installedStatusFilter = 'all';
+        }
+        if (!in_array($this->installedSortMode, ['alpha_asc', 'alpha_desc', 'newest', 'oldest'], true)) {
+            $this->installedSortMode = 'alpha_asc';
+        }
+
+        if ($this->browseOpenSourceOnly && $this->browseExcludeOpenSource) {
+            $this->browseExcludeOpenSource = false;
+        }
+    }
+
+    /**
+     * @param string[] $value
+     * @param string[] $allowed
+     * @return string[]
+     */
+    protected function sanitizeUrlArray(array $value, array $allowed): array
+    {
+        return collect($value)
+            ->filter(fn ($item) => is_string($item) && in_array($item, $allowed, true))
+            ->unique()
+            ->values()
+            ->toArray();
     }
 
     public function getTableRecordKey(mixed $record): string
@@ -761,7 +841,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         return [
             'installed' => Tab::make(trans('pelican-mod-manager::strings.page.view_installed')),
-            'all' => Tab::make($tabLabel),
+            'browse' => Tab::make($tabLabel),
         ];
     }
 
@@ -1724,6 +1804,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     // Return ALL installed items on a single page (pagination disabled for installed tab)
                     return new LengthAwarePaginator($combinedItems, $totalItems, max($totalItems, 1), 1);
                 } else {
+                    if ($page > 1 && $page !== $this->browseCurrentPage) {
+                        $this->browseCurrentPage = $page;
+                    } else {
+                        $page = max(1, $this->browseCurrentPage);
+                    }
+
                     $browseSortMap = [
                         'downloads' => ['downloads',    'desc'],
                         'follows'   => ['follows',      'desc'],
@@ -2227,12 +2313,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         if ($num >= 1000) return round($num / 1000, 1) . 'K';
                         return $num;
                     })
-                    ->visible(fn () => $this->activeTab === 'all'),
+                    ->visible(fn () => $this->activeTab === 'browse'),
                 TextColumn::make('date_modified')
                     ->icon('tabler-clock')
                     ->formatStateUsing(fn ($state) => $state ? Carbon::parse($state, 'UTC')->diffForHumans() : '')
                     ->tooltip(fn ($state) => $state ? Carbon::parse($state, 'UTC')->timezone(user()->timezone ?? 'UTC')->format($table->getDefaultDateTimeDisplayFormat()) : '')
-                    ->visible(fn () => $this->activeTab === 'all'),
+                    ->visible(fn () => $this->activeTab === 'browse'),
             ])
             ->recordActions([
                 Action::make('install_latest')
@@ -2240,7 +2326,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->color('success')
                     ->label(trans('pelican-mod-manager::strings.actions.install'))
                     ->visible(function (array $record) {
-                        if ($this->activeTab !== 'all') return false;
+                        if ($this->activeTab !== 'browse') return false;
                         if (!empty($record['is_local']) || !empty($record['unavailable'])) {
                             return false;
                         }
@@ -2298,7 +2384,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->color('warning')
                     ->label(trans('pelican-mod-manager::strings.actions.update'))
                     ->visible(function (array $record) {
-                        if ($this->activeTab !== 'all') return false;
+                        if ($this->activeTab !== 'browse') return false;
                         return isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);
                     })
                     ->requiresConfirmation()
@@ -2368,7 +2454,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->label(trans('pelican-mod-manager::strings.actions.installed'))
                     ->disabled()
                     ->visible(function (array $record) {
-                        if ($this->activeTab !== 'all') return false;
+                        if ($this->activeTab !== 'browse') return false;
                         $installedMod = $this->getInstalledMod($record['project_id']);
 
                         if (is_null($installedMod)) {
@@ -3774,7 +3860,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $allowed = ['relevance', 'downloads', 'follows', 'newest', 'updated'];
         if (in_array($mode, $allowed, true)) {
             $this->browseSortMode = $mode;
-            $this->gotoPage(1);
+            $this->setBrowsePage(1);
         }
     }
 
@@ -3783,8 +3869,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $allowed = [5, 10, 15, 20, 50, 100];
         if (in_array($size, $allowed, true)) {
             $this->browsePageSize = $size;
-            $this->gotoPage(1); // reset to page 1 when changing page size
+            $this->setBrowsePage(1);
         }
+    }
+
+    public function setBrowsePage(int $page): void
+    {
+        $this->browseCurrentPage = max(1, $page);
+        $this->gotoPage($this->browseCurrentPage);
     }
 
     /** @return array<string, string> */
@@ -3821,7 +3913,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ? array_values(array_diff($this->browseCategoryFilters, [$category]))
             : array_values(array_unique([...$this->browseCategoryFilters, $category]));
         $this->browseExcludedCategoryFilters = array_values(array_diff($this->browseExcludedCategoryFilters, [$category]));
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseExcludedCategoryFilter(string $category): void
@@ -3832,7 +3924,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ? array_values(array_diff($this->browseExcludedCategoryFilters, [$category]))
             : array_values(array_unique([...$this->browseExcludedCategoryFilters, $category]));
         $this->browseCategoryFilters = array_values(array_diff($this->browseCategoryFilters, [$category]));
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseEnvironmentFilter(string $environment): void
@@ -3843,7 +3935,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ? array_values(array_diff($this->browseEnvironmentFilters, [$environment]))
             : array_values(array_unique([...$this->browseEnvironmentFilters, $environment]));
         $this->browseExcludedEnvironmentFilters = array_values(array_diff($this->browseExcludedEnvironmentFilters, [$environment]));
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseExcludedEnvironmentFilter(string $environment): void
@@ -3854,7 +3946,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ? array_values(array_diff($this->browseExcludedEnvironmentFilters, [$environment]))
             : array_values(array_unique([...$this->browseExcludedEnvironmentFilters, $environment]));
         $this->browseEnvironmentFilters = array_values(array_diff($this->browseEnvironmentFilters, [$environment]));
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseOpenSourceFilter(): void
@@ -3863,7 +3955,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         if ($this->browseOpenSourceOnly) {
             $this->browseExcludeOpenSource = false;
         }
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseExcludeOpenSourceFilter(): void
@@ -3872,13 +3964,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         if ($this->browseExcludeOpenSource) {
             $this->browseOpenSourceOnly = false;
         }
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     public function toggleBrowseHideInstalled(): void
     {
         $this->browseHideInstalled = !$this->browseHideInstalled;
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     /** @return array<string, mixed> */
@@ -4075,7 +4167,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 $active = $n === $cur;
                 $style  = $active ? $pBtnOn : $pBtnOff;
                 $data   = $active ? " data-cur='1'" : '';
-                return "<button type='button' wire:click=\"gotoPage({$n})\"{$data} style=\"{$style}\"{$pBtnHov}>{$n}</button>";
+                return "<button type='button' wire:click=\"setBrowsePage({$n})\"{$data} style=\"{$style}\"{$pBtnHov}>{$n}</button>";
             };
 
             $pages = [];
@@ -4088,10 +4180,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             $ellipsis = "<span style='display:inline-flex;align-items:center;color:#4b5563;font-size:12px;padding:0 4px;'>…</span>";
             $prevPage = $cur > 1
-                ? "<button type='button' wire:click=\"gotoPage(" . ($cur - 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&lsaquo;</button>"
+                ? "<button type='button' wire:click=\"setBrowsePage(" . ($cur - 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&lsaquo;</button>"
                 : "<button disabled style=\"{$pBtnOff}opacity:0.3;cursor:default\">&lsaquo;</button>";
             $nextPage = $cur < $total
-                ? "<button type='button' wire:click=\"gotoPage(" . ($cur + 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&rsaquo;</button>"
+                ? "<button type='button' wire:click=\"setBrowsePage(" . ($cur + 1) . ")\" style=\"{$pBtnOff}\" {$pBtnHov}>&rsaquo;</button>"
                 : "<button disabled style=\"{$pBtnOff}opacity:0.3;cursor:default\">&rsaquo;</button>";
 
             $paginationHtml = $prevPage;
@@ -4121,6 +4213,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     public function updatedActiveTab(): void
     {
+        $this->syncActiveTabPath();
+
         if ($this->activeTab === 'installed') {
             /** @var Server $server */
             $server = Filament::getTenant();
@@ -4135,9 +4229,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         }
     }
 
+    protected function syncActiveTabPath(): void
+    {
+        $tab = in_array($this->activeTab, ['installed', 'browse'], true) ? $this->activeTab : 'installed';
+        $this->js(<<<JS
+            (() => {
+                const url = new URL(window.location.href);
+                const replacement = '/mods/{$tab}';
+                if (/\\/mods(?:\\/(?:browse|installed))?\\/?$/.test(url.pathname)) {
+                    url.pathname = url.pathname.replace(/\\/mods(?:\\/(?:browse|installed))?\\/?$/, replacement);
+                } else {
+                    url.pathname = url.pathname.replace(/\\/?$/, replacement);
+                }
+                window.history.replaceState({}, '', url);
+            })()
+        JS);
+    }
+
     public function updatedBrowseSearch(): void
     {
-        $this->gotoPage(1);
+        $this->setBrowsePage(1);
     }
 
     /**

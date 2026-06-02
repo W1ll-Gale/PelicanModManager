@@ -70,6 +70,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public ?string $importFilePath = null;
     public ?array $importFilesToDownload = null;
     public ?array $importDownloadedMods = [];
+    public int $importSkippedInstalledMods = 0;
 
     public string $browseSearch = '';
     public string $browseSortMode = 'relevance';
@@ -1648,6 +1649,43 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         return null;
     }
 
+    /** @return array<string, true> */
+    protected function getInstalledModrinthSha1s(Server $server): array
+    {
+        $hashes = [];
+        $metadata = $this->getInstalledModsMetadata();
+        $projectIds = collect($metadata)
+            ->pluck('project_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+        $this->warmVersionsCacheParallel($server, $projectIds);
+
+        foreach ($metadata as $mod) {
+            $projectId = $mod['project_id'] ?? '';
+            $versionId = $mod['version_id'] ?? '';
+            if ($projectId === '' || $versionId === '') {
+                continue;
+            }
+
+            $versions = $this->getCachedVersions($projectId);
+            $version = collect($versions)->firstWhere('id', $versionId);
+            if (!$version || empty($version['files']) || !is_array($version['files'])) {
+                continue;
+            }
+
+            foreach ($version['files'] as $file) {
+                $sha1 = $file['hashes']['sha1'] ?? null;
+                if (is_string($sha1) && $sha1 !== '') {
+                    $hashes[strtolower($sha1)] = true;
+                }
+            }
+        }
+
+        return $hashes;
+    }
+
     /**
      * @throws Exception
      */
@@ -2915,6 +2953,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->schema([
                     FileUpload::make('file')
                         ->label(trans('pelican-mod-manager::strings.page.mod_file'))
+                        ->preserveFilenames()
                         ->required(),
                 ])
                 ->action(function (array $data) {
@@ -2975,6 +3014,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                                 $projectIconUrl = $pd['icon_url'] ?? null;
                                                 $projectType = $pd['project_type'] ?? $projectType;
                                                 $versionData = $vd;
+                                                $existingMod = $this->getInstalledMod($projectId);
+                                                if ($existingMod && strcasecmp($existingMod['filename'] ?? '', $safeFilename) !== 0) {
+                                                    try {
+                                                        Http::daemon($server->node)
+                                                            ->post("/api/servers/{$server->uuid}/files/delete", [
+                                                                'root' => '/',
+                                                                'files' => [$folder . '/' . $this->validateFilename($existingMod['filename'] ?? '')],
+                                                            ])
+                                                            ->throw();
+                                                    } catch (Exception $deleteException) {
+                                                        Log::warning('Failed to remove replaced uploaded jar: ' . $deleteException->getMessage());
+                                                    }
+                                                }
                                                 PelicanModManager::saveModMetadata($server, $projectId, $projectSlug, $projectName, $versionId, $versionNumber, $safeFilename, $author);
                                                 $resolved = true;
                                             }
@@ -3009,7 +3061,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if ($disk) { try { $disk->delete($filePath); } catch (Exception $e) {} }
                             $this->isImporting = true; $this->importProgress = 5;
                             $this->importStatus = 'Initializing modpack installation...';
-                            $this->importFilePath = $tempDest; $this->importFilesToDownload = null; $this->importDownloadedMods = [];
+                            $this->importFilePath = $tempDest; $this->importFilesToDownload = null; $this->importDownloadedMods = []; $this->importSkippedInstalledMods = 0;
                             Notification::make()->title(trans('pelican-mod-manager::strings.actions.upload_mod'))
                                 ->body('Modpack installation started. Please keep this page open.')->info()->send();
                         }
@@ -3230,6 +3282,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 // Prepare files to download
                 $filesToDownload = [];
+                $installedSha1s = $this->getInstalledModrinthSha1s($server);
+                $skippedInstalled = 0;
                 foreach ($indexData['files'] as $fileEntry) {
                     if (!isset($fileEntry['path']) || !isset($fileEntry['downloads']) || !is_array($fileEntry['downloads'])) {
                         continue;
@@ -3244,17 +3298,28 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         continue;
                     }
 
+                    $sha1 = isset($fileEntry['hashes']['sha1']) && is_string($fileEntry['hashes']['sha1'])
+                        ? strtolower($fileEntry['hashes']['sha1'])
+                        : null;
+                    if ($sha1 && isset($installedSha1s[$sha1])) {
+                        $skippedInstalled++;
+                        continue;
+                    }
+
                     $filesToDownload[] = [
                         'url' => $fileEntry['downloads'][0],
                         'path' => $targetPath,
-                        'sha1' => $fileEntry['hashes']['sha1'] ?? null,
+                        'sha1' => $sha1,
                     ];
                 }
 
                 $this->importFilesToDownload = $filesToDownload;
                 $this->importDownloadedMods = [];
+                $this->importSkippedInstalledMods = $skippedInstalled;
                 $this->importProgress = 15;
-                $this->importStatus = 'Overrides extracted. Downloading mods...';
+                $this->importStatus = $skippedInstalled > 0
+                    ? "Skipped {$skippedInstalled} already installed mod" . ($skippedInstalled === 1 ? '. Downloading changes...' : 's. Downloading changes...')
+                    : 'Overrides extracted. Downloading mods...';
                 return;
             }
 
@@ -3288,6 +3353,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 $this->importProgress = 90;
 
                 $resolvedMods = [];
+                $filesToDelete = [];
                 if (!empty($this->importDownloadedMods)) {
                     $chunks = array_chunk($this->importDownloadedMods, 50);
                     $versionDataMap = [];
@@ -3364,10 +3430,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         }
                     }
 
+                    $installedByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
+
                     foreach ($modResolutions as $sha1 => $res) {
                         $pId = $res['project_id'];
                         if (isset($projectDetailsMap[$pId])) {
                             $proj = $projectDetailsMap[$pId];
+                            $existingMod = $installedByProjectId->get($pId);
+                            if (
+                                is_array($existingMod)
+                                && !empty($existingMod['filename'])
+                                && strcasecmp($existingMod['filename'], $res['filename']) !== 0
+                            ) {
+                                $filesToDelete[] = $type->getFolder() . '/' . $this->validateFilename($existingMod['filename']);
+                            }
                             $resolvedMods[] = [
                                 'project_id' => $pId,
                                 'project_slug' => $proj['slug'] ?? '',
@@ -3382,6 +3458,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 if (!empty($resolvedMods)) {
                     PelicanModManager::saveModsMetadata($server, $resolvedMods);
+                }
+                if (!empty($filesToDelete)) {
+                    try {
+                        Http::daemon($server->node)
+                            ->post("/api/servers/{$server->uuid}/files/delete", [
+                                'root' => '/',
+                                'files' => array_values(array_unique($filesToDelete)),
+                            ])
+                            ->throw();
+                    } catch (Exception $deleteException) {
+                        Log::warning('Failed to remove replaced modpack jars: ' . $deleteException->getMessage());
+                    }
                 }
 
                 $this->importProgress = 95;
@@ -3410,9 +3498,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             Notification::make()
                 ->title(trans('pelican-mod-manager::strings.notifications.mrpack_upload_success'))
-                ->body(trans('pelican-mod-manager::strings.notifications.mrpack_upload_success_body'))
+                ->body($this->importSkippedInstalledMods > 0
+                    ? trans('pelican-mod-manager::strings.notifications.mrpack_upload_success_body') . " Skipped {$this->importSkippedInstalledMods} already installed mod" . ($this->importSkippedInstalledMods === 1 ? '.' : 's.')
+                    : trans('pelican-mod-manager::strings.notifications.mrpack_upload_success_body'))
                 ->success()
                 ->send();
+            $this->importSkippedInstalledMods = 0;
 
         } catch (Exception $exception) {
             report($exception);
@@ -3430,6 +3521,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $this->importFilePath = null;
             $this->importFilesToDownload = null;
             $this->importDownloadedMods = [];
+            $this->importSkippedInstalledMods = 0;
 
             $this->invalidateMetadataCache();
             $this->versionsCache = [];
@@ -3497,16 +3589,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function uninstallSelectedInstalledMods(): void
     {
         try {
-            $records = method_exists($this, 'getSelectedTableRecords')
-                ? $this->getSelectedTableRecords()
-                : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
+            $records = $this->getSelectedInstalledRecordsForBulk();
 
             if ($records->isEmpty()) {
                 return;
             }
 
             $this->uninstallInstalledRecords($records);
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             report($e);
             Notification::make()
                 ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
@@ -3545,9 +3635,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public function setSelectedInstalledModsEnabled(bool $enabled): void
     {
         try {
-            $records = method_exists($this, 'getSelectedTableRecords')
-                ? $this->getSelectedTableRecords()
-                : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
+            $records = $this->getSelectedInstalledRecordsForBulk();
 
             if ($records->isEmpty()) {
                 return;
@@ -3680,7 +3768,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->body(($enabled ? 'Enabled ' : 'Disabled ') . count($updates) . ' selected mod' . (count($updates) === 1 ? '.' : 's.'))
                 ->success()
                 ->send();
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             report($e);
             Notification::make()
                 ->title($enabled ? 'Failed to enable mods' : 'Failed to disable mods')
@@ -3692,15 +3780,37 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     public function prepareSelectedModpackExport(): void
     {
-        $records = method_exists($this, 'getSelectedTableRecords')
-            ? $this->getSelectedTableRecords()
-            : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
+        try {
+            $records = $this->getSelectedInstalledRecordsForBulk();
 
-        $this->exportModpackProjectIds = $records
-            ->pluck('project_id')
-            ->filter()
-            ->values()
-            ->toArray();
+            $this->exportModpackProjectIds = $records
+                ->pluck('project_id')
+                ->filter()
+                ->values()
+                ->toArray();
+        } catch (\Throwable $e) {
+            report($e);
+            $this->exportModpackProjectIds = [];
+            Notification::make()
+                ->title('Failed to prepare export')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    protected function getSelectedInstalledRecordsForBulk(): \Illuminate\Support\Collection
+    {
+        try {
+            if (method_exists($this, 'getSelectedTableRecords')) {
+                $records = $this->getSelectedTableRecords();
+                return $records instanceof \Illuminate\Support\Collection ? $records : collect($records);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to read selected table records: ' . $e->getMessage());
+        }
+
+        return $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
     }
 
     /**
@@ -4069,9 +4179,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     call(bar, method, ...args) {
                         const wire = this.getWire(bar);
                         if (!wire) return Promise.resolve(null);
-                        if (typeof wire[method] === 'function') return Promise.resolve(wire[method](...args));
-                        if (typeof wire.call === 'function') return Promise.resolve(wire.call(method, ...args));
-                        return Promise.resolve(null);
+                        const promise = typeof wire.call === 'function'
+                            ? wire.call(method, ...args)
+                            : (typeof wire[method] === 'function' ? wire[method](...args) : null);
+
+                        return Promise.resolve(promise).catch((error) => {
+                            console.error('Pelican Mod Manager selection action failed', method, error);
+                            return null;
+                        });
+                    },
+                    fireEvent(bar, event, payload = {}) {
+                        const wire = this.getWire(bar);
+                        if (!wire) return Promise.resolve(null);
+                        const promise = typeof wire.dispatch === 'function'
+                            ? wire.dispatch(event, payload)
+                            : (typeof wire.emit === 'function' ? wire.emit(event, payload) : null);
+
+                        return Promise.resolve(promise).catch((error) => {
+                            console.error('Pelican Mod Manager selection event failed', event, error);
+                            return null;
+                        });
                     },
                     set(bar, property, value) {
                         const wire = this.getWire(bar);

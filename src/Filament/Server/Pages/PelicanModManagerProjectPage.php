@@ -126,6 +126,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         return $type?->getLabel() ?? 'Modrinth';
     }
 
+    public static function getNavigationUrl(): string
+    {
+        return static::getUrl(['modTab' => 'installed']);
+    }
+
     public static function getModelLabel(): string
     {
         return static::getNavigationLabel();
@@ -160,6 +165,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         if ($this->activeTab === 'browse' && $this->browseCurrentPage > 1) {
             $this->gotoPage($this->browseCurrentPage);
+        }
+
+        if ($modTab === null) {
+            $this->syncActiveTabPath();
         }
     }
 

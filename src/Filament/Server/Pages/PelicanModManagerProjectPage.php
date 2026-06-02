@@ -3387,7 +3387,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         try {
             $records = method_exists($this, 'getSelectedTableRecords')
                 ? $this->getSelectedTableRecords()
-                : collect();
+                : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
 
             if ($records->isEmpty()) {
                 return;
@@ -3400,8 +3400,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
                 ->body($e->getMessage())
                 ->danger()
-                ->send();
+            ->send();
         }
+    }
+
+    /**
+     * @param string[] $ids
+     */
+    protected function getInstalledRecordsByIds(array $ids): \Illuminate\Support\Collection
+    {
+        if (empty($ids)) {
+            return collect();
+        }
+
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) {
+            return collect();
+        }
+
+        return collect($this->getInstalledModsResolvedList($server, $type))
+            ->filter(fn ($record) => in_array($record['project_id'] ?? '', $ids, true))
+            ->values();
     }
 
     protected function uninstallInstalledRecords(\Illuminate\Support\Collection $records): void
@@ -3917,56 +3938,71 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     protected function renderInstalledSelectionBar(): string
     {
-        $selectedIds = array_values($this->selectedTableRecords ?? []);
-        $selectedCount = count($selectedIds);
-        if ($selectedCount === 0) {
-            return '';
-        }
-
         /** @var Server $server */
         $server = Filament::getTenant();
         $type = ModrinthProjectType::fromServer($server);
         $items = $type
             ? cache()->get("modrinth_installed_resolved_list_" . $server->uuid, $this->getMetadataOnlyList())
             : $this->getMetadataOnlyList();
-        $itemsById = collect(is_array($items) ? $items : [])->keyBy('project_id');
+        $itemMap = collect(is_array($items) ? $items : [])
+            ->mapWithKeys(fn ($item) => [
+                (string)($item['project_id'] ?? '') => [
+                    'title' => $item['title'] ?? 'Selected mod',
+                    'icon_url' => $item['icon_url'] ?? null,
+                ],
+            ])
+            ->filter(fn ($item, $key) => $key !== '')
+            ->toArray();
+        $itemsJson = base64_encode(json_encode($itemMap) ?: '{}');
 
-        $avatars = '';
-        $maxAvatars = min(3, $selectedCount);
-        for ($i = 0; $i < $maxAvatars; $i++) {
-            $id = $selectedIds[$i] ?? null;
-            $item = $id ? $itemsById->get($id) : null;
-            $title = e($item['title'] ?? 'Selected mod');
-            $icon = $item['icon_url'] ?? null;
-            $left = $i * 24;
-            $z = $maxAvatars - $i;
-            $content = $icon
-                ? "<img src='" . e($icon) . "' alt='{$title}' loading='eager'>"
-                : e(strtoupper(substr($item['title'] ?? '?', 0, 1)));
-            $avatars .= "<div class='pmm-selection-avatar' title='{$title}' style='left:{$left}px;z-index:{$z};'>{$content}</div>";
-        }
-        if ($selectedCount > 3) {
-            $left = 72;
-            $extra = $selectedCount - 3;
-            $avatars .= "<div class='pmm-selection-avatar' style='left:{$left}px;z-index:0;'>+{$extra}</div>";
-        }
-        $avatarWidth = $selectedCount > 3 ? 104 : max(32, $maxAvatars * 24 + 8);
-
-        $label = $selectedCount === 1 ? '1 mod selected' : "{$selectedCount} mods selected";
         $xSvg = "<svg width='18' height='18' viewBox='0 0 20 20' fill='currentColor'><path fill-rule='evenodd' d='M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 1 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414' clip-rule='evenodd'/></svg>";
         $trashSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6'/></svg>";
 
         return <<<HTML
-            <div class="pmm-selection-bar" role="toolbar" aria-label="Selection actions">
-                <div class="pmm-selection-avatars" style="width: {$avatarWidth}px;">{$avatars}</div>
-                <span class="pmm-selection-count">{$label}</span>
+            <div
+                x-data="{
+                    selected: \$wire.entangle('selectedTableRecords').live,
+                    items: JSON.parse(atob('{$itemsJson}')),
+                    selectedList() {
+                        return Array.isArray(this.selected) ? this.selected : Object.values(this.selected || {});
+                    },
+                    count() {
+                        return this.selectedList().length;
+                    },
+                    visibleItems() {
+                        return this.selectedList().slice(0, 3).map((id) => this.items[id] || { title: 'Selected mod', icon_url: null });
+                    },
+                    avatarWidth() {
+                        const count = this.count();
+                        return count > 3 ? 104 : Math.max(32, Math.min(3, count) * 24 + 8);
+                    }
+                }"
+                x-show="count() > 0"
+                x-cloak
+                class="pmm-selection-bar"
+                role="toolbar"
+                aria-label="Selection actions"
+            >
+                <div class="pmm-selection-avatars" :style="'width:' + avatarWidth() + 'px'">
+                    <template x-for="(item, index) in visibleItems()" :key="selectedList()[index]">
+                        <div class="pmm-selection-avatar" :title="item.title" :style="'left:' + (index * 24) + 'px;z-index:' + (3 - index)">
+                            <template x-if="item.icon_url">
+                                <img :src="item.icon_url" :alt="item.title" loading="eager">
+                            </template>
+                            <template x-if="!item.icon_url">
+                                <span x-text="(item.title || '?').charAt(0).toUpperCase()"></span>
+                            </template>
+                        </div>
+                    </template>
+                    <div x-show="count() > 3" x-cloak class="pmm-selection-avatar" style="left:72px;z-index:0;" x-text="'+' + (count() - 3)"></div>
+                </div>
+                <span class="pmm-selection-count" x-text="count() === 1 ? '1 mod selected' : count() + ' mods selected'"></span>
                 <div class="pmm-selection-divider"></div>
-                <button type="button" class="pmm-selection-button" wire:click="clearInstalledSelection">
+                <button type="button" class="pmm-selection-button" x-on:click="\$wire.clearInstalledSelection()">
                     {$xSvg}<span>Clear</span>
                 </button>
                 <div class="pmm-selection-actions">
                     <button type="button" class="pmm-selection-button pmm-selection-button-danger"
-                        x-data
                         x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallSelectedInstalledMods() }">
                         {$trashSvg}<span>Delete</span>
                     </button>

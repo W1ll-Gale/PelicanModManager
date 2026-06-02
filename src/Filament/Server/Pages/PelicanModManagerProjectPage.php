@@ -556,7 +556,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             /* Hide Filament's built-in table toolbar (search bar + column toggle) for
                ALL tabs — both tabs use their own custom search bars. */
             .fi-ta-header,
-            .fi-ta-header-toolbar,
             .fi-ta-search,
             .fi-ta-column-toggle,
             .fi-ta-column-manager,
@@ -640,26 +639,137 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
-                .fi-ta-selection-indicator,
-                .fi-ta-bulk-actions {
-                    display: none !important;
-                }
-
-                .pmm-selection-bar {
+                .fi-ta-main > .fi-ta-header-ctn {
                     position: fixed;
                     left: 50%;
                     bottom: 18px;
                     transform: translateX(-50%);
                     z-index: 110;
+                    width: min(560px, calc(100vw - 32px)) !important;
+                    max-width: min(760px, calc(100vw - 32px));
+                    background: transparent !important;
+                    border: 0 !important;
+                    box-shadow: none !important;
+                    padding: 0 !important;
+                }
+
+                .fi-ta-main > .fi-ta-header-ctn .fi-ta-header-toolbar {
                     display: flex;
                     align-items: center;
+                    justify-content: flex-end;
                     gap: 8px;
-                    max-width: min(760px, calc(100vw - 32px));
                     padding: 10px 12px;
                     border-radius: 20px;
                     border: 1px solid rgba(255,255,255,0.14);
                     background: #202127;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35);
+                }
+
+                .fi-ta-main > .fi-ta-header-ctn .fi-ta-actions {
+                    display: flex !important;
+                    align-items: center !important;
+                    gap: 4px !important;
+                    flex-wrap: nowrap !important;
+                }
+
+                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action {
+                    width: auto !important;
+                    height: 36px !important;
+                    min-width: 36px !important;
+                    padding: 0 10px !important;
+                    border: 0 !important;
+                    border-radius: 12px !important;
+                    background: transparent !important;
+                    color: #f87171 !important;
+                    box-shadow: none !important;
+                }
+
+                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action:hover {
+                    background: #ef4444 !important;
+                    color: #ffffff !important;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator {
+                    position: fixed;
+                    left: calc(50% - 230px);
+                    bottom: 28px;
+                    z-index: 111;
+                    display: flex !important;
+                    align-items: center;
+                    gap: 8px;
+                    width: auto !important;
+                    padding: 0 !important;
+                    border: 0 !important;
+                    background: transparent !important;
+                    box-shadow: none !important;
+                    color: #f4f4f5 !important;
+                    font-size: 15px;
+                    font-weight: 800;
+                    pointer-events: auto;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator > div:first-child {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    white-space: nowrap;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator > div:first-child::before {
+                    content: '';
+                    display: inline-flex;
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 8px;
+                    border: 1.5px solid #202127;
+                    background: linear-gradient(135deg, #225f3b, #2a2b32);
+                    box-shadow: 24px 0 0 -1.5px #2a2b32, 48px 0 0 -1.5px #2a2b32;
+                    margin-right: 52px;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-loading-indicator {
+                    display: none !important;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator::after {
+                    content: '';
+                    width: 1px;
+                    height: 24px;
+                    background: rgba(255,255,255,0.12);
+                    margin-left: 4px;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn {
+                    display: inline-flex !important;
+                    align-items: center;
+                    gap: 4px;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:first-child {
+                    display: none !important;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child {
+                    display: inline-flex !important;
+                    align-items: center;
+                    height: 36px;
+                    padding: 0 10px;
+                    border-radius: 12px;
+                    background: transparent;
+                    color: #d4d4d8 !important;
+                    font-size: 0;
+                    font-weight: 700;
+                    text-decoration: none !important;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child::before {
+                    content: 'Clear';
+                    font-size: 14px;
+                }
+
+                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child:hover {
+                    background: rgba(255,255,255,0.08);
+                    color: #ffffff !important;
                 }
 
                 .pmm-selection-avatars {
@@ -745,11 +855,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
 
                 @media (max-width: 640px) {
-                    .pmm-selection-bar {
+                    .fi-ta-main > .fi-ta-header-ctn {
                         left: 12px;
                         right: 12px;
                         transform: none;
                         max-width: none;
+                    }
+
+                    .fi-ta-main > .fi-ta-selection-indicator {
+                        left: 24px;
                     }
 
                     .pmm-selection-count {
@@ -3952,10 +4066,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->hidden(fn () => $this->activeTab !== 'installed' || !$this->installedDataReady)
                     ->state(fn () => new HtmlString($this->renderInstalledFilterBar())),
                 EmbeddedTable::make(),
-                TextEntry::make('installed_selection_bar')
-                    ->hiddenLabel()
-                    ->hidden(fn () => $this->activeTab !== 'installed')
-                    ->state(fn () => new HtmlString($this->renderInstalledSelectionBar())),
             ]);
     }
 

@@ -639,18 +639,71 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
+                .fi-ta input[type='checkbox'] {
+                    accent-color: #1bd96a !important;
+                }
+
+                .fi-ta input[type='checkbox']:checked {
+                    background-color: #1bd96a !important;
+                    border-color: #1bd96a !important;
+                    color: #111318 !important;
+                }
+
+                .fi-ta-content {
+                    overflow: hidden !important;
+                    border: 1px solid #2d2f34 !important;
+                    border-radius: 12px !important;
+                    background: #202127 !important;
+                }
+
+                .fi-ta-row {
+                    min-height: 74px !important;
+                    padding: 10px 18px !important;
+                    margin-bottom: 0 !important;
+                    border: 0 !important;
+                    border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+                    border-radius: 0 !important;
+                    background: #202127 !important;
+                    box-shadow: none !important;
+                    transform: none !important;
+                }
+
+                .fi-ta-row:last-child {
+                    border-bottom: 0 !important;
+                }
+
+                .fi-ta-row:hover {
+                    border-color: rgba(255,255,255,0.08) !important;
+                    background: #25272d !important;
+                    box-shadow: none !important;
+                    transform: none !important;
+                }
+
+                .fi-ta-row > td:nth-child(2) img[style*='width:72px'],
+                .fi-ta-row > td:nth-child(2) div[style*='width:72px'] {
+                    width: 48px !important;
+                    height: 48px !important;
+                    border-radius: 8px !important;
+                }
+
+                .fi-ta-row > td:nth-child(2) div[style*='gap:16px'] {
+                    gap: 12px !important;
+                    padding: 0 !important;
+                }
+
                 .fi-ta-main > .fi-ta-header-ctn {
                     position: fixed;
                     left: 50%;
                     bottom: 18px;
                     transform: translateX(-50%);
-                    z-index: 110;
-                    width: min(560px, calc(100vw - 32px)) !important;
+                    z-index: 112;
+                    width: min(760px, calc(100vw - 32px)) !important;
                     max-width: min(760px, calc(100vw - 32px));
                     background: transparent !important;
                     border: 0 !important;
                     box-shadow: none !important;
                     padding: 0 !important;
+                    pointer-events: none;
                 }
 
                 .fi-ta-main > .fi-ta-header-ctn .fi-ta-header-toolbar {
@@ -658,11 +711,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     align-items: center;
                     justify-content: flex-end;
                     gap: 8px;
-                    padding: 10px 12px;
+                    min-height: 58px;
+                    padding: 10px 14px 10px 320px;
                     border-radius: 20px;
-                    border: 1px solid rgba(255,255,255,0.14);
-                    background: #202127;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35);
+                    border: 0 !important;
+                    background: transparent !important;
+                    box-shadow: none !important;
+                    pointer-events: none;
                 }
 
                 .fi-ta-main > .fi-ta-header-ctn .fi-ta-actions {
@@ -670,6 +725,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     align-items: center !important;
                     gap: 4px !important;
                     flex-wrap: nowrap !important;
+                    pointer-events: auto;
                 }
 
                 .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action {
@@ -684,6 +740,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     box-shadow: none !important;
                 }
 
+                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action::after {
+                    content: 'Delete';
+                    margin-left: 6px;
+                    font-size: 14px;
+                    font-weight: 800;
+                }
+
                 .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action:hover {
                     background: #ef4444 !important;
                     color: #ffffff !important;
@@ -691,19 +754,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 .fi-ta-main > .fi-ta-selection-indicator {
                     position: fixed;
-                    left: calc(50% - 230px);
-                    bottom: 28px;
+                    left: 50%;
+                    bottom: 18px;
+                    transform: translateX(-50%);
                     z-index: 111;
-                    display: flex !important;
+                    display: flex;
                     align-items: center;
-                    gap: 8px;
-                    width: auto !important;
-                    padding: 0 !important;
-                    border: 0 !important;
-                    background: transparent !important;
-                    box-shadow: none !important;
+                    gap: 10px;
+                    width: min(760px, calc(100vw - 32px)) !important;
+                    min-height: 58px;
+                    padding: 10px 128px 10px 14px !important;
+                    border: 1px solid rgba(255,255,255,0.14) !important;
+                    border-radius: 20px !important;
+                    background: #202127 !important;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35) !important;
                     color: #f4f4f5 !important;
-                    font-size: 15px;
+                    font-size: 16px;
                     font-weight: 800;
                     pointer-events: auto;
                 }
@@ -718,13 +784,18 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 .fi-ta-main > .fi-ta-selection-indicator > div:first-child::before {
                     content: '';
                     display: inline-flex;
-                    width: 32px;
-                    height: 32px;
+                    width: 34px;
+                    height: 34px;
                     border-radius: 8px;
-                    border: 1.5px solid #202127;
-                    background: linear-gradient(135deg, #225f3b, #2a2b32);
-                    box-shadow: 24px 0 0 -1.5px #2a2b32, 48px 0 0 -1.5px #2a2b32;
-                    margin-right: 52px;
+                    border: 1px solid rgba(255,255,255,0.12);
+                    background:
+                        linear-gradient(135deg, rgba(27,217,106,0.55), rgba(59,130,246,0.5)),
+                        #2a2b32;
+                    box-shadow:
+                        22px 0 0 -1px #33353d,
+                        44px 0 0 -1px #2a2b32,
+                        66px 0 0 -1px #24262c;
+                    margin-right: 50px;
                 }
 
                 .fi-ta-main > .fi-ta-selection-indicator .fi-loading-indicator {
@@ -736,7 +807,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     width: 1px;
                     height: 24px;
                     background: rgba(255,255,255,0.12);
-                    margin-left: 4px;
+                    margin-left: 8px;
                 }
 
                 .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn {
@@ -753,7 +824,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: inline-flex !important;
                     align-items: center;
                     height: 36px;
-                    padding: 0 10px;
+                    padding: 0 14px;
                     border-radius: 12px;
                     background: transparent;
                     color: #d4d4d8 !important;
@@ -860,10 +931,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         right: 12px;
                         transform: none;
                         max-width: none;
+                        width: auto !important;
+                    }
+
+                    .fi-ta-main > .fi-ta-header-ctn .fi-ta-header-toolbar {
+                        padding-left: 180px;
                     }
 
                     .fi-ta-main > .fi-ta-selection-indicator {
-                        left: 24px;
+                        left: 12px;
+                        right: 12px;
+                        transform: none;
+                        width: auto !important;
+                        padding-right: 112px !important;
+                        font-size: 13px;
                     }
 
                     .pmm-selection-count {
@@ -880,7 +961,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: flex !important;
                     flex-shrink: 0 !important;
                     width: auto !important;
-                    margin-right: 12px !important;
+                    margin-right: 18px !important;
                     align-items: center !important;
                     justify-content: center !important;
                 }
@@ -1002,10 +1083,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 thead tr {
                     display: flex !important;
                     align-items: center !important;
-                    padding: 0 20px !important;
-                    height: 52px !important;
-                    margin-bottom: 4px !important;
+                    padding: 0 18px !important;
+                    height: 48px !important;
+                    margin-bottom: 0 !important;
                     border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+                    background: #24262c !important;
                 }
                 thead th {
                     display: block !important;
@@ -1023,7 +1105,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 thead th:first-child {
                     flex-shrink: 0 !important;
                     width: auto !important;
-                    margin-right: 12px !important;
+                    margin-right: 18px !important;
                 }
                 thead th:nth-child(2) { flex: 1 1 0 !important; }
                 thead th:nth-child(3) { flex: 0 0 320px !important; width: 320px !important; text-align: center !important; }
@@ -2082,7 +2164,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->recordClasses(fn (array $record) => !empty($record['is_disabled']) ? 'pmm-row-disabled' : null)
             ->columns([
                 TextColumn::make('title')
-                    ->label(fn () => $this->activeTab === 'installed' ? 'Mod' : 'Title')
+                    ->label(fn () => $this->activeTab === 'installed' ? 'Project' : 'Title')
                     ->wrap()
                     ->formatStateUsing(function ($state, $record) {
                         $title  = e($record['title'] ?? $state ?? '');
@@ -3875,7 +3957,46 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->components([
                 TextEntry::make('custom_styles')
                     ->hiddenLabel()
-                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style></div>")),
+                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style><script>
+                        (() => {
+                            if (window.pmmSelectionLabelObserver) return;
+
+                            const rewriteSelectionLabels = () => {
+                                document.querySelectorAll('.fi-ta-selection-indicator').forEach((indicator) => {
+                                    const walker = document.createTreeWalker(indicator, NodeFilter.SHOW_TEXT);
+                                    const nodes = [];
+                                    let node;
+
+                                    while ((node = walker.nextNode())) {
+                                        nodes.push(node);
+                                    }
+
+                                    nodes.forEach((textNode) => {
+                                        const nextValue = textNode.nodeValue.replace(
+                                            /\\b(\\d+)\\s+(?:records?|projects?|mods?)\\s+selected\\b/gi,
+                                            (_, count) => count + ' mods selected'
+                                        );
+
+                                        if (nextValue !== textNode.nodeValue) {
+                                            textNode.nodeValue = nextValue;
+                                        }
+                                    });
+                                });
+                            };
+
+                            const scheduleRewrite = () => window.requestAnimationFrame(rewriteSelectionLabels);
+                            const observer = new MutationObserver(scheduleRewrite);
+
+                            if (document.body) {
+                                observer.observe(document.body, { childList: true, characterData: true, subtree: true });
+                            }
+
+                            document.addEventListener('livewire:navigated', scheduleRewrite);
+                            document.addEventListener('livewire:updated', scheduleRewrite);
+                            window.pmmSelectionLabelObserver = observer;
+                            scheduleRewrite();
+                        })();
+                    </script></div>")),
                 TextEntry::make('import_progress')
                     ->hidden(fn () => !$this->isImporting)
                     ->hiddenLabel()

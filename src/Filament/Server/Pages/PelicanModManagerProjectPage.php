@@ -3088,7 +3088,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     if (!$type) return;
 
                     $folder = $type->getFolder();
-                    $selectedProjectIds = array_values(array_filter($this->exportModpackProjectIds));
+                    $selectedProjectIds = array_values(array_filter(
+                        $this->exportModpackProjectIds ?: $this->getInstalledBulkSelectionIds()
+                    ));
                     $selectedRecords = empty($selectedProjectIds)
                         ? collect()
                         : $this->getInstalledRecordsByIds($selectedProjectIds);
@@ -4199,10 +4201,40 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         return this.selected.map((id) => items[id]).filter(Boolean);
                     },
                     getWire(bar) {
-                        const root = bar?.closest?.('[wire\\:id]');
-                        const id = root?.getAttribute?.('wire:id');
-                        const component = id && window.Livewire?.find ? window.Livewire.find(id) : null;
-                        return component?.$wire || component || null;
+                        const livewire = window.Livewire;
+                        if (!livewire?.find) return null;
+
+                        const ids = [];
+                        const nearestId = bar?.closest?.('[wire\\:id]')?.getAttribute?.('wire:id');
+                        if (nearestId) ids.push(nearestId);
+
+                        document.querySelectorAll('[wire\\:id]').forEach((node) => {
+                            const id = node.getAttribute('wire:id');
+                            if (id && !ids.includes(id)) ids.push(id);
+                        });
+
+                        let fallback = null;
+                        for (const id of ids) {
+                            const component = livewire.find(id);
+                            if (!component) continue;
+
+                            const wire = component.$wire || component;
+                            fallback ??= wire;
+
+                            const data = component.canonical || component.ephemeral || component.serverMemo?.data || component.snapshot?.data || {};
+                            if (
+                                Object.prototype.hasOwnProperty.call(data, 'installedBulkSelectionJson')
+                                || Object.prototype.hasOwnProperty.call(data, 'installedSearch')
+                                || Object.prototype.hasOwnProperty.call(data, 'activeTab')
+                                || ('installedBulkSelectionJson' in wire)
+                                || ('installedSearch' in wire)
+                                || ('activeTab' in wire)
+                            ) {
+                                return wire;
+                            }
+                        }
+
+                        return fallback;
                     },
                     call(bar, method, ...args) {
                         const wire = this.getWire(bar);
@@ -4312,7 +4344,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 if (shareFormat === 'export') {
                                     this.setMenuOpen(bar, false);
                                     this.syncSelection(bar)
-                                        .then(() => this.call(bar, 'prepareSelectedModpackExport'))
                                         .then(() => this.call(bar, 'mountAction', 'export_modpack'));
                                     return;
                                 }

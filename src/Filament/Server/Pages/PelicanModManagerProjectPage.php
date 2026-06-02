@@ -4322,6 +4322,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     setMenuOpen(bar, open) {
                         bar?.querySelector('[data-pmm-selection-menu]')?.classList.toggle('pmm-selection-menu--open', open);
                     },
+                    getSelectedBoxes() {
+                        return Array.from(document.querySelectorAll('.fi-ta input[type=checkbox]:checked'))
+                            .filter((box) => !box.closest('thead'));
+                    },
                     refresh() {
                         this.selected = this.getSelectedIds();
                         const count = this.selected.length;
@@ -4347,6 +4351,51 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         this.selected.forEach((id) => {
                             if (items[id]) items[id].is_disabled = !enabled;
                         });
+                        this.refresh();
+                    },
+                    applyBulkVisualState(enabled) {
+                        const selectedBoxes = this.getSelectedBoxes();
+                        selectedBoxes.forEach((box) => {
+                            const row = box.closest('.fi-ta-row, tr');
+                            if (!row) return;
+
+                            row.classList.toggle('pmm-row-disabled', !enabled);
+                            row.style.filter = enabled ? '' : 'grayscale(1)';
+                            row.style.opacity = enabled ? '' : '0.45';
+
+                            const toggle = row.querySelector('.pmm-toggle-switch');
+                            if (toggle) {
+                                const oldFilename = toggle.dataset.pmmFilename || '';
+                                const newFilename = enabled
+                                    ? oldFilename.replace(/\.disabled$/i, '')
+                                    : (oldFilename.match(/\.disabled$/i) ? oldFilename : oldFilename + '.disabled');
+
+                                toggle.dataset.pmmFilename = newFilename;
+                                toggle.style.setProperty('--pmm-toggle-bg', enabled ? '#1BD96A' : '#2f333d');
+                                toggle.style.setProperty('--pmm-toggle-knob-bg', enabled ? '#03150A' : '#9aa4b2');
+                                toggle.style.setProperty('--pmm-toggle-x', enabled ? '22px' : '0px');
+
+                                const alpine = window.Alpine?.$data ? window.Alpine.$data(toggle) : null;
+                                if (alpine && Object.prototype.hasOwnProperty.call(alpine, 'on')) {
+                                    alpine.on = enabled;
+                                    alpine.busy = false;
+                                }
+                            }
+
+                            box.checked = false;
+                            box.indeterminate = false;
+                            box.blur();
+                            box.dispatchEvent(new Event('change', { bubbles: true }));
+                        });
+
+                        document.querySelectorAll('.fi-ta thead input[type=checkbox]:checked, .fi-ta thead input[type=checkbox]').forEach((box) => {
+                            box.checked = false;
+                            box.indeterminate = false;
+                            box.blur();
+                            box.dispatchEvent(new Event('change', { bubbles: true }));
+                        });
+
+                        this.selected = [];
                         this.refresh();
                     },
                     bind() {
@@ -4396,7 +4445,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if (action === 'clear') {
                                 this.call(bar, 'clearInstalledSelection');
                                 this.call(bar, 'setInstalledBulkSelection', '[]');
-                                document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => {
+                                document.querySelectorAll('.fi-ta input[type=checkbox]:checked, .fi-ta input[type=checkbox]').forEach((box) => {
                                     box.checked = false;
                                     box.indeterminate = false;
                                     box.blur();
@@ -4408,8 +4457,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
+                                const selected = [...this.selected];
                                 this.markSelected(bar, enabled);
-                                this.call(bar, 'setSelectedInstalledModsEnabled', this.selected, enabled);
+                                this.applyBulkVisualState(enabled);
+                                this.call(bar, 'setSelectedInstalledModsEnabled', selected, enabled);
                                 return;
                             }
 

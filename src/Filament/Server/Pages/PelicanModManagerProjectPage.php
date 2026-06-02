@@ -3707,31 +3707,34 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ])
                 ->throw();
 
+            $metadataByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
+            $metadataUpdates = [];
             foreach ($updates as $update) {
                 $projectId = $update['project_id'];
                 if ($projectId === '' || str_starts_with($projectId, 'local_')) {
                     continue;
                 }
 
-                $installedMod = $this->getInstalledMod($projectId);
+                $installedMod = $metadataByProjectId->get($projectId);
                 if (!$installedMod) {
                     continue;
                 }
 
-                PelicanModManager::saveModMetadata(
-                    $server,
-                    $projectId,
-                    $installedMod['project_slug'],
-                    $installedMod['project_title'],
-                    $installedMod['version_id'],
-                    $installedMod['version_number'],
-                    $update['new_filename'],
-                    $installedMod['author'] ?? null
-                );
+                $metadataUpdates[] = [
+                    'project_id' => $projectId,
+                    'project_slug' => $installedMod['project_slug'],
+                    'project_title' => $installedMod['project_title'],
+                    'version_id' => $installedMod['version_id'],
+                    'version_number' => $installedMod['version_number'],
+                    'filename' => $update['new_filename'],
+                    'author' => $installedMod['author'] ?? null,
+                ];
+            }
+            if (!empty($metadataUpdates)) {
+                PelicanModManager::saveModsMetadata($server, $metadataUpdates);
             }
 
             $this->invalidateMetadataCache();
-            $this->versionsCache = [];
 
             foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
                 $cacheKey = $prefix . $server->uuid;
@@ -3876,7 +3879,21 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             return collect();
         }
 
-        return collect($this->getInstalledModsResolvedList($server, $type))
+        $records = collect([
+            cache()->get("modrinth_installed_resolved_list_" . $server->uuid),
+            cache()->get("pmm_basic_installed_{$server->uuid}"),
+            $this->getMetadataOnlyList(),
+        ])
+            ->filter(fn ($items) => is_array($items) && !empty($items))
+            ->flatMap(fn ($items) => $items)
+            ->unique(fn ($record) => $record['project_id'] ?? ($record['filename'] ?? uniqid('', true)))
+            ->values();
+
+        if ($records->isEmpty()) {
+            $records = collect($this->getInstalledModsResolvedList($server, $type));
+        }
+
+        return $records
             ->filter(fn ($record) => in_array($record['project_id'] ?? '', $ids, true))
             ->values();
     }

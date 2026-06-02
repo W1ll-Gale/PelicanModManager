@@ -3407,6 +3407,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /**
      * @param string[] $ids
      */
+    public function uninstallInstalledModsByIds(array $ids): void
+    {
+        try {
+            $records = $this->getInstalledRecordsByIds($ids);
+
+            if ($records->isEmpty()) {
+                return;
+            }
+
+            $this->uninstallInstalledRecords($records);
+        } catch (Exception $e) {
+            report($e);
+            Notification::make()
+                ->title(trans('pelican-mod-manager::strings.notifications.uninstall_failed'))
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    /**
+     * @param string[] $ids
+     */
     protected function getInstalledRecordsByIds(array $ids): \Illuminate\Support\Collection
     {
         if (empty($ids)) {
@@ -3961,10 +3984,32 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         return <<<HTML
             <div
                 x-data="{
-                    selected: \$wire.entangle('selectedTableRecords').live,
+                    selected: [],
                     items: JSON.parse(atob('{$itemsJson}')),
+                    init() {
+                        const refresh = () => this.refreshSelection();
+                        this.\$nextTick(refresh);
+                        document.addEventListener('change', (event) => {
+                            if (event.target?.matches?.('.fi-ta input[type=checkbox]')) {
+                                refresh();
+                            }
+                        });
+                        new MutationObserver(refresh).observe(document.body, {
+                            childList: true,
+                            subtree: true,
+                            attributes: true,
+                            attributeFilter: ['checked', 'aria-checked'],
+                        });
+                    },
+                    refreshSelection() {
+                        const boxes = Array.from(document.querySelectorAll('.fi-ta input[type=checkbox]:checked'))
+                            .filter((box) => !box.closest('thead'));
+                        this.selected = boxes
+                            .map((box) => box.value || box.getAttribute('value') || '')
+                            .filter((value) => value && value !== 'on');
+                    },
                     selectedList() {
-                        return Array.isArray(this.selected) ? this.selected : Object.values(this.selected || {});
+                        return this.selected;
                     },
                     count() {
                         return this.selectedList().length;
@@ -3998,12 +4043,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 </div>
                 <span class="pmm-selection-count" x-text="count() === 1 ? '1 mod selected' : count() + ' mods selected'"></span>
                 <div class="pmm-selection-divider"></div>
-                <button type="button" class="pmm-selection-button" x-on:click="\$wire.clearInstalledSelection()">
+                <button type="button" class="pmm-selection-button" x-on:click="\$wire.clearInstalledSelection(); document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => { box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); }); selected = []">
                     {$xSvg}<span>Clear</span>
                 </button>
                 <div class="pmm-selection-actions">
                     <button type="button" class="pmm-selection-button pmm-selection-button-danger"
-                        x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallSelectedInstalledMods() }">
+                        x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallInstalledModsByIds(selectedList()) }">
                         {$trashSvg}<span>Delete</span>
                     </button>
                 </div>

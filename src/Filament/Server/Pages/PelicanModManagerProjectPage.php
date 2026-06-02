@@ -3642,10 +3642,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /**
      * @param string[] $ids
      */
-    public function setSelectedInstalledModsEnabled(bool $enabled): void
+    /**
+     * @param string[] $ids
+     */
+    public function setSelectedInstalledModsEnabled(array $ids, bool $enabled): void
     {
         try {
-            $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
+            $records = $this->getInstalledRecordsByIds($ids);
 
             if ($records->isEmpty()) {
                 return;
@@ -3807,6 +3810,20 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    /**
+     * @param string[] $ids
+     */
+    public function exportSelectedModpack(array $ids): mixed
+    {
+        $this->exportModpackProjectIds = collect($ids)
+            ->filter(fn ($id) => is_string($id) && $id !== '')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        return $this->mountAction('export_modpack');
     }
 
     public function setInstalledBulkSelection(string $idsJson): void
@@ -4316,9 +4333,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         });
                         this.refresh();
                     },
-                    syncSelection(bar) {
-                        return this.call(bar, 'setInstalledBulkSelection', JSON.stringify(this.selected));
-                    },
                     bind() {
                         if (this.bound) return;
                         this.bound = true;
@@ -4343,8 +4357,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 event.preventDefault();
                                 if (shareFormat === 'export') {
                                     this.setMenuOpen(bar, false);
-                                    this.syncSelection(bar)
-                                        .then(() => this.call(bar, 'mountAction', 'export_modpack'));
+                                    this.call(bar, 'exportSelectedModpack', this.selected);
                                     return;
                                 }
 
@@ -4380,14 +4393,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
                                 this.markSelected(bar, enabled);
-                                this.syncSelection(bar)
-                                    .then(() => this.call(bar, 'setSelectedInstalledModsEnabled', enabled));
+                                this.call(bar, 'setSelectedInstalledModsEnabled', this.selected, enabled);
                                 return;
                             }
 
                             if (action === 'delete' && confirm('Uninstall selected mods?')) {
-                                this.syncSelection(bar)
-                                    .then(() => this.call(bar, 'uninstallSelectedInstalledMods'));
+                                this.call(bar, 'uninstallInstalledModsByIds', this.selected);
                             }
                         });
 

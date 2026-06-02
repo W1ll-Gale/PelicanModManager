@@ -694,7 +694,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     bottom: 18px;
                     transform: translateX(-50%);
                     z-index: 120;
-                    display: flex;
+                    display: none;
                     align-items: center;
                     gap: 8px;
                     width: min(900px, calc(100vw - 32px));
@@ -704,6 +704,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     border-radius: 20px;
                     background: #202127;
                     box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35);
+                }
+
+                .pmm-selection-bar.pmm-selection-bar--active {
+                    display: flex;
                 }
 
                 .pmm-selection-count {
@@ -770,7 +774,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     position: absolute;
                     left: 0;
                     bottom: calc(100% + 8px);
-                    display: flex;
+                    display: none;
                     min-width: 220px;
                     flex-direction: column;
                     gap: 2px;
@@ -779,6 +783,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     border-radius: 12px;
                     background: #18191e;
                     box-shadow: 0 14px 34px rgba(0,0,0,0.55);
+                }
+
+                .pmm-selection-menu.pmm-selection-menu--open {
+                    display: flex;
                 }
 
                 .pmm-selection-menu-item {
@@ -796,6 +804,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     font-size: 13px;
                     font-weight: 700;
                     text-align: left;
+                }
+
+                .pmm-selection-menu-item svg {
+                    width: 17px;
+                    height: 17px;
+                    flex: 0 0 auto;
                 }
 
                 .pmm-selection-menu-item:hover {
@@ -3991,6 +4005,190 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
 
 
+    protected function getInstalledSelectionBarScript(): string
+    {
+        return <<<'JS'
+            (() => {
+                const controller = {
+                    version: 3,
+                    selected: [],
+                    getBars() {
+                        return Array.from(document.querySelectorAll('[data-pmm-selection-bar]'));
+                    },
+                    getItems(bar) {
+                        if (!bar) return {};
+                        const encoded = bar.getAttribute('data-pmm-items') || 'e30=';
+                        if (bar._pmmItemsEncoded !== encoded) {
+                            try {
+                                bar._pmmItems = JSON.parse(atob(encoded));
+                            } catch (error) {
+                                bar._pmmItems = {};
+                            }
+                            bar._pmmItemsEncoded = encoded;
+                        }
+                        return bar._pmmItems || {};
+                    },
+                    getSelectedIds() {
+                        return Array.from(document.querySelectorAll('.fi-ta input[type=checkbox]:checked'))
+                            .filter((box) => !box.closest('thead'))
+                            .map((box) => box.value || box.getAttribute('value') || '')
+                            .filter((value) => value && value !== 'on')
+                            .filter((value, index, values) => values.indexOf(value) === index);
+                    },
+                    getSelectedItems(bar) {
+                        const items = this.getItems(bar);
+                        return this.selected.map((id) => items[id]).filter(Boolean);
+                    },
+                    getWire(bar) {
+                        const root = bar?.closest?.('[wire\\:id]');
+                        const id = root?.getAttribute?.('wire:id');
+                        const component = id && window.Livewire?.find ? window.Livewire.find(id) : null;
+                        return component?.$wire || component || null;
+                    },
+                    call(bar, method, ...args) {
+                        const wire = this.getWire(bar);
+                        if (!wire) return Promise.resolve(null);
+                        if (typeof wire[method] === 'function') return Promise.resolve(wire[method](...args));
+                        if (typeof wire.call === 'function') return Promise.resolve(wire.call(method, ...args));
+                        return Promise.resolve(null);
+                    },
+                    set(bar, property, value) {
+                        const wire = this.getWire(bar);
+                        if (!wire) return Promise.resolve(null);
+                        if (typeof wire.set === 'function') return Promise.resolve(wire.set(property, value));
+                        return this.call(bar, 'set', property, value);
+                    },
+                    projectUrl(item) {
+                        if (!item || item.is_local || !item.slug) return '';
+                        return 'https://modrinth.com/' + (item.project_type || 'mod') + '/' + item.slug;
+                    },
+                    copyShare(bar, format) {
+                        const lines = this.getSelectedItems(bar).map((item) => {
+                            const title = item.title || 'Selected mod';
+                            const filename = item.filename || title;
+                            const url = this.projectUrl(item);
+
+                            if (format === 'names') return title;
+                            if (format === 'files') return filename;
+                            if (format === 'links') return url || title;
+                            if (format === 'markdown') return url ? '[' + title + '](' + url + ')' : title;
+
+                            return title;
+                        }).filter(Boolean);
+
+                        navigator.clipboard?.writeText(lines.join('\n'));
+                    },
+                    setMenuOpen(bar, open) {
+                        bar?.querySelector('[data-pmm-selection-menu]')?.classList.toggle('pmm-selection-menu--open', open);
+                    },
+                    refresh() {
+                        this.selected = this.getSelectedIds();
+                        const count = this.selected.length;
+
+                        this.getBars().forEach((bar) => {
+                            const items = this.getSelectedItems(bar);
+                            const allEnabled = items.length > 0 && items.every((item) => !item.is_disabled);
+                            const allDisabled = items.length > 0 && items.every((item) => item.is_disabled);
+
+                            bar.classList.toggle('pmm-selection-bar--active', count > 0);
+                            bar.querySelector('[data-pmm-selection-count]').textContent =
+                                count === 1 ? '1 mod selected' : count + ' mods selected';
+                            bar.querySelector('[data-pmm-selection-action="enable"]').disabled = allEnabled;
+                            bar.querySelector('[data-pmm-selection-action="disable"]').disabled = allDisabled;
+
+                            if (count === 0) {
+                                this.setMenuOpen(bar, false);
+                            }
+                        });
+                    },
+                    markSelected(bar, enabled) {
+                        const items = this.getItems(bar);
+                        this.selected.forEach((id) => {
+                            if (items[id]) items[id].is_disabled = !enabled;
+                        });
+                        this.refresh();
+                    },
+                    bind() {
+                        if (this.bound) return;
+                        this.bound = true;
+
+                        document.addEventListener('change', (event) => {
+                            if (event.target?.matches?.('.fi-ta input[type=checkbox]')) {
+                                window.requestAnimationFrame(() => this.refresh());
+                            }
+                        });
+
+                        document.addEventListener('click', (event) => {
+                            const bar = event.target?.closest?.('[data-pmm-selection-bar]');
+
+                            this.getBars().forEach((candidate) => {
+                                if (candidate !== bar) this.setMenuOpen(candidate, false);
+                            });
+
+                            if (!bar) return;
+
+                            const shareFormat = event.target.closest('[data-pmm-selection-share]')?.getAttribute('data-pmm-selection-share');
+                            if (shareFormat) {
+                                event.preventDefault();
+                                if (shareFormat === 'export') {
+                                    this.setMenuOpen(bar, false);
+                                    this.set(bar, 'exportModpackProjectIds', this.selected)
+                                        .then(() => this.call(bar, 'mountAction', 'export_modpack'));
+                                    return;
+                                }
+
+                                this.copyShare(bar, shareFormat);
+                                this.setMenuOpen(bar, false);
+                                return;
+                            }
+
+                            const action = event.target.closest('[data-pmm-selection-action]')?.getAttribute('data-pmm-selection-action');
+                            if (!action) return;
+
+                            event.preventDefault();
+
+                            if (action === 'share') {
+                                const menu = bar.querySelector('[data-pmm-selection-menu]');
+                                this.setMenuOpen(bar, !menu?.classList.contains('pmm-selection-menu--open'));
+                                return;
+                            }
+
+                            if (action === 'clear') {
+                                this.call(bar, 'clearInstalledSelection');
+                                document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => {
+                                    box.checked = false;
+                                    box.dispatchEvent(new Event('change', { bubbles: true }));
+                                });
+                                this.refresh();
+                                return;
+                            }
+
+                            if (action === 'enable' || action === 'disable') {
+                                const enabled = action === 'enable';
+                                this.markSelected(bar, enabled);
+                                this.call(bar, 'setSelectedInstalledModsEnabled', this.selected, enabled);
+                                return;
+                            }
+
+                            if (action === 'delete' && confirm('Uninstall selected mods?')) {
+                                this.call(bar, 'uninstallInstalledModsByIds', this.selected);
+                            }
+                        });
+
+                        new MutationObserver(() => window.requestAnimationFrame(() => this.refresh()))
+                            .observe(document.body, { childList: true, subtree: true });
+                        document.addEventListener('livewire:navigated', () => this.refresh());
+                        document.addEventListener('livewire:updated', () => this.refresh());
+                    },
+                };
+
+                window.pmmSelectionBarController = controller;
+                controller.bind();
+                window.requestAnimationFrame(() => controller.refresh());
+            })();
+        JS;
+    }
+
     public function content(Schema $schema): Schema
     {
         /** @var Server $server */
@@ -4002,7 +4200,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->components([
                 TextEntry::make('custom_styles')
                     ->hiddenLabel()
-                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style></div>")),
+                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style><script>" . $this->getInstalledSelectionBarScript() . "</script></div>")),
                 TextEntry::make('import_progress')
                     ->hidden(fn () => !$this->isImporting)
                     ->hiddenLabel()
@@ -4232,110 +4430,39 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         return <<<HTML
             <div
-                x-data="{
-                    selected: [],
-                    shareOpen: false,
-                    items: JSON.parse(atob('{$itemsJson}')),
-                    init() {
-                        const refresh = () => this.refreshSelection();
-                        this.\$nextTick(refresh);
-                        document.addEventListener('change', (event) => {
-                            if (event.target?.matches?.('.fi-ta input[type=checkbox]')) {
-                                refresh();
-                            }
-                        });
-                        new MutationObserver(refresh).observe(document.body, {
-                            childList: true,
-                            subtree: true,
-                            attributes: true,
-                            attributeFilter: ['checked', 'aria-checked'],
-                        });
-                    },
-                    refreshSelection() {
-                        const boxes = Array.from(document.querySelectorAll('.fi-ta input[type=checkbox]:checked'))
-                            .filter((box) => !box.closest('thead'));
-                        this.selected = boxes
-                            .map((box) => box.value || box.getAttribute('value') || '')
-                            .filter((value) => value && value !== 'on');
-                    },
-                    selectedList() {
-                        return this.selected;
-                    },
-                    selectedItems() {
-                        return this.selectedList()
-                            .map((id) => this.items[id])
-                            .filter(Boolean);
-                    },
-                    count() {
-                        return this.selectedList().length;
-                    },
-                    allEnabled() {
-                        const items = this.selectedItems();
-                        return items.length > 0 && items.every((item) => !item.is_disabled);
-                    },
-                    allDisabled() {
-                        const items = this.selectedItems();
-                        return items.length > 0 && items.every((item) => item.is_disabled);
-                    },
-                    markSelected(enabled) {
-                        this.selectedItems().forEach((item) => item.is_disabled = !enabled);
-                    },
-                    projectUrl(item) {
-                        if (!item || item.is_local || !item.slug) return '';
-                        return 'https://modrinth.com/' + (item.project_type || 'mod') + '/' + item.slug;
-                    },
-                    copyShare(format) {
-                        const items = this.selectedItems();
-                        const lines = items.map((item) => {
-                            const title = item.title || 'Selected mod';
-                            const filename = item.filename || title;
-                            const url = this.projectUrl(item);
-
-                            if (format === 'names') return title;
-                            if (format === 'files') return filename;
-                            if (format === 'links') return url || title;
-                            if (format === 'markdown') return url ? '[' + title + '](' + url + ')' : title;
-
-                            return title;
-                        }).filter(Boolean);
-
-                        navigator.clipboard?.writeText(lines.join('\n'));
-                        this.shareOpen = false;
-                    }
-                }"
-                x-show="count() > 0"
-                x-cloak
                 class="pmm-selection-bar"
+                data-pmm-selection-bar
+                data-pmm-items="{$itemsJson}"
                 role="toolbar"
                 aria-label="Selection actions"
             >
-                <span class="pmm-selection-count" x-text="count() === 1 ? '1 mod selected' : count() + ' mods selected'"></span>
+                <span class="pmm-selection-count" data-pmm-selection-count>0 mods selected</span>
                 <div class="pmm-selection-divider"></div>
-                <button type="button" class="pmm-selection-button" x-on:click="\$wire.clearInstalledSelection(); document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => { box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); }); selected = []">
+                <button type="button" class="pmm-selection-button" data-pmm-selection-action="clear">
                     <span>Clear</span>
                 </button>
                 <div class="pmm-selection-spacer"></div>
-                <div class="pmm-selection-menu-wrap" x-on:click.outside="shareOpen = false">
-                    <button type="button" class="pmm-selection-button" x-on:click.stop="shareOpen = !shareOpen">
+                <div class="pmm-selection-menu-wrap">
+                    <button type="button" class="pmm-selection-button" data-pmm-selection-action="share">
                         {$shareSvg}<span>Share</span>
                     </button>
-                    <div class="pmm-selection-menu" x-show="shareOpen" x-cloak>
-                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('names')">{$copySvg}<span>Mod names</span></button>
-                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('files')">{$copySvg}<span>File names</span></button>
-                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('links')">{$copySvg}<span>Project links</span></button>
-                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('markdown')">{$copySvg}<span>Markdown links</span></button>
-                        <button type="button" class="pmm-selection-menu-item" x-on:click="shareOpen = false; \$wire.set('exportModpackProjectIds', selectedList()).then(() => \$wire.mountAction('export_modpack'))">{$exportSvg}<span>Export as modpack</span></button>
+                    <div class="pmm-selection-menu" data-pmm-selection-menu>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="names">{$copySvg}<span>Mod names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="files">{$copySvg}<span>File names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="links">{$copySvg}<span>Project links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="markdown">{$copySvg}<span>Markdown links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="export">{$exportSvg}<span>Export as modpack</span></button>
                     </div>
                 </div>
-                <button type="button" class="pmm-selection-button" x-bind:disabled="allEnabled()" x-on:click="markSelected(true); \$wire.setSelectedInstalledModsEnabled(selectedList(), true)">
+                <button type="button" class="pmm-selection-button" data-pmm-selection-action="enable">
                     {$enableSvg}<span>Enable</span>
                 </button>
-                <button type="button" class="pmm-selection-button" x-bind:disabled="allDisabled()" x-on:click="markSelected(false); \$wire.setSelectedInstalledModsEnabled(selectedList(), false)">
+                <button type="button" class="pmm-selection-button" data-pmm-selection-action="disable">
                     {$disableSvg}<span>Disable</span>
                 </button>
                 <div class="pmm-selection-divider"></div>
                 <button type="button" class="pmm-selection-button pmm-selection-button-danger"
-                    x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallInstalledModsByIds(selectedList()) }">
+                    data-pmm-selection-action="delete">
                     {$trashSvg}<span>Delete</span>
                 </button>
             </div>

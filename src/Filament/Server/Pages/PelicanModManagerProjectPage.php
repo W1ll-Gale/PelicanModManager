@@ -101,6 +101,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     public bool $installedDataReady = true;
     // Phase 2: Modrinth-enriched list (icons, author avatars) loaded in background
     public bool $installedEnriched = false;
+    /** @var string[] */
+    public array $exportModpackProjectIds = [];
 
     protected static string|\BackedEnum|null $navigationIcon = 'tabler-packages';
 
@@ -639,16 +641,6 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $tabCss = <<<CSS
                 /* --- INSTALLED TAB CELLS --- */
 
-                .fi-ta input[type='checkbox'] {
-                    accent-color: #1bd96a !important;
-                }
-
-                .fi-ta input[type='checkbox']:checked {
-                    background-color: #1bd96a !important;
-                    border-color: #1bd96a !important;
-                    color: #111318 !important;
-                }
-
                 .fi-ta-content {
                     overflow: hidden !important;
                     border: 1px solid #2d2f34 !important;
@@ -691,185 +683,27 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     padding: 0 !important;
                 }
 
-                .fi-ta-main > .fi-ta-header-ctn {
-                    position: fixed;
-                    left: 50%;
-                    bottom: 18px;
-                    transform: translateX(-50%);
-                    z-index: 112;
-                    width: min(760px, calc(100vw - 32px)) !important;
-                    max-width: min(760px, calc(100vw - 32px));
-                    background: transparent !important;
-                    border: 0 !important;
-                    box-shadow: none !important;
-                    padding: 0 !important;
-                    pointer-events: none;
-                }
-
-                .fi-ta-main > .fi-ta-header-ctn .fi-ta-header-toolbar {
-                    display: flex;
-                    align-items: center;
-                    justify-content: flex-end;
-                    gap: 8px;
-                    min-height: 58px;
-                    padding: 10px 14px 10px 320px;
-                    border-radius: 20px;
-                    border: 0 !important;
-                    background: transparent !important;
-                    box-shadow: none !important;
-                    pointer-events: none;
-                }
-
-                .fi-ta-main > .fi-ta-header-ctn .fi-ta-actions {
-                    display: flex !important;
-                    align-items: center !important;
-                    gap: 4px !important;
-                    flex-wrap: nowrap !important;
-                    pointer-events: auto;
-                }
-
-                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action {
-                    width: auto !important;
-                    height: 36px !important;
-                    min-width: 36px !important;
-                    padding: 0 10px !important;
-                    border: 0 !important;
-                    border-radius: 12px !important;
-                    background: transparent !important;
-                    color: #f87171 !important;
-                    box-shadow: none !important;
-                }
-
-                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action::after {
-                    content: 'Delete';
-                    margin-left: 6px;
-                    font-size: 14px;
-                    font-weight: 800;
-                }
-
-                .fi-ta-main > .fi-ta-header-ctn .fi-ac-icon-btn-action:hover {
-                    background: #ef4444 !important;
-                    color: #ffffff !important;
-                }
-
+                .fi-ta-main > .fi-ta-header-ctn,
                 .fi-ta-main > .fi-ta-selection-indicator {
+                    display: none !important;
+                }
+
+                .pmm-selection-bar {
                     position: fixed;
                     left: 50%;
                     bottom: 18px;
                     transform: translateX(-50%);
-                    z-index: 111;
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    width: min(760px, calc(100vw - 32px)) !important;
-                    min-height: 58px;
-                    padding: 10px 128px 10px 14px !important;
-                    border: 1px solid rgba(255,255,255,0.14) !important;
-                    border-radius: 20px !important;
-                    background: #202127 !important;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35) !important;
-                    color: #f4f4f5 !important;
-                    font-size: 16px;
-                    font-weight: 800;
-                    pointer-events: auto;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator > div:first-child {
+                    z-index: 120;
                     display: flex;
                     align-items: center;
                     gap: 8px;
-                    white-space: nowrap;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator > div:first-child::before {
-                    content: '';
-                    display: inline-flex;
-                    width: 34px;
-                    height: 34px;
-                    border-radius: 8px;
-                    border: 1px solid rgba(255,255,255,0.12);
-                    background:
-                        linear-gradient(135deg, rgba(27,217,106,0.55), rgba(59,130,246,0.5)),
-                        #2a2b32;
-                    box-shadow:
-                        22px 0 0 -1px #33353d,
-                        44px 0 0 -1px #2a2b32,
-                        66px 0 0 -1px #24262c;
-                    margin-right: 50px;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-loading-indicator {
-                    display: none !important;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator::after {
-                    content: '';
-                    width: 1px;
-                    height: 24px;
-                    background: rgba(255,255,255,0.12);
-                    margin-left: 8px;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn {
-                    display: inline-flex !important;
-                    align-items: center;
-                    gap: 4px;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:first-child {
-                    display: none !important;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child {
-                    display: inline-flex !important;
-                    align-items: center;
-                    height: 36px;
-                    padding: 0 14px;
-                    border-radius: 12px;
-                    background: transparent;
-                    color: #d4d4d8 !important;
-                    font-size: 0;
-                    font-weight: 700;
-                    text-decoration: none !important;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child::before {
-                    content: 'Clear';
-                    font-size: 14px;
-                }
-
-                .fi-ta-main > .fi-ta-selection-indicator .fi-ta-selection-indicator-actions-ctn button:last-child:hover {
-                    background: rgba(255,255,255,0.08);
-                    color: #ffffff !important;
-                }
-
-                .pmm-selection-avatars {
-                    position: relative;
-                    height: 32px;
-                    flex: 0 0 auto;
-                }
-
-                .pmm-selection-avatar {
-                    position: absolute;
-                    top: 0;
-                    width: 32px;
-                    height: 32px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    overflow: hidden;
-                    border-radius: 8px;
-                    border: 1.5px solid #202127;
-                    background: #2a2b32;
-                    color: #f4f4f5;
-                    font-size: 11px;
-                    font-weight: 800;
-                }
-
-                .pmm-selection-avatar img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: cover;
+                    width: min(900px, calc(100vw - 32px));
+                    min-height: 58px;
+                    padding: 10px 14px;
+                    border: 1px solid rgba(255,255,255,0.14);
+                    border-radius: 20px;
+                    background: #202127;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 10px 24px rgba(0,0,0,0.35);
                 }
 
                 .pmm-selection-count {
@@ -884,23 +718,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     width: 1px;
                     height: 24px;
                     background: rgba(255,255,255,0.12);
-                    margin: 0 4px;
+                    margin: 0 8px;
                     flex-shrink: 0;
                 }
 
-                .pmm-selection-actions {
-                    display: flex;
-                    align-items: center;
-                    gap: 4px;
-                    margin-left: auto;
+                .pmm-selection-spacer {
+                    flex: 1 1 auto;
+                    min-width: 64px;
                 }
 
                 .pmm-selection-button {
+                    position: relative;
                     display: inline-flex;
                     align-items: center;
                     gap: 6px;
                     height: 36px;
-                    padding: 0 10px;
+                    padding: 0 12px;
                     border: 0;
                     border-radius: 12px;
                     background: transparent;
@@ -911,7 +744,61 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     transition: background-color 0.12s ease, color 0.12s ease;
                 }
 
+                .pmm-selection-button svg {
+                    width: 17px;
+                    height: 17px;
+                    flex: 0 0 auto;
+                }
+
                 .pmm-selection-button:hover {
+                    background: rgba(255,255,255,0.08);
+                    color: #ffffff;
+                }
+
+                .pmm-selection-button:disabled {
+                    opacity: 0.38;
+                    cursor: default;
+                    pointer-events: none;
+                }
+
+                .pmm-selection-menu-wrap {
+                    position: relative;
+                    display: inline-flex;
+                }
+
+                .pmm-selection-menu {
+                    position: absolute;
+                    left: 0;
+                    bottom: calc(100% + 8px);
+                    display: flex;
+                    min-width: 220px;
+                    flex-direction: column;
+                    gap: 2px;
+                    padding: 6px;
+                    border: 1px solid rgba(255,255,255,0.12);
+                    border-radius: 12px;
+                    background: #18191e;
+                    box-shadow: 0 14px 34px rgba(0,0,0,0.55);
+                }
+
+                .pmm-selection-menu-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    width: 100%;
+                    min-height: 34px;
+                    padding: 0 10px;
+                    border: 0;
+                    border-radius: 8px;
+                    background: transparent;
+                    color: #d4d4d8;
+                    cursor: pointer;
+                    font-size: 13px;
+                    font-weight: 700;
+                    text-align: left;
+                }
+
+                .pmm-selection-menu-item:hover {
                     background: rgba(255,255,255,0.08);
                     color: #ffffff;
                 }
@@ -926,24 +813,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
 
                 @media (max-width: 640px) {
-                    .fi-ta-main > .fi-ta-header-ctn {
-                        left: 12px;
-                        right: 12px;
-                        transform: none;
-                        max-width: none;
-                        width: auto !important;
-                    }
-
-                    .fi-ta-main > .fi-ta-header-ctn .fi-ta-header-toolbar {
-                        padding-left: 180px;
-                    }
-
-                    .fi-ta-main > .fi-ta-selection-indicator {
+                    .pmm-selection-bar {
                         left: 12px;
                         right: 12px;
                         transform: none;
                         width: auto !important;
-                        padding-right: 112px !important;
+                        overflow-x: auto;
                         font-size: 13px;
                     }
 
@@ -951,8 +826,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         font-size: 13px;
                     }
 
-                    .pmm-selection-button span {
-                        display: none;
+                    .pmm-selection-spacer {
+                        min-width: 24px;
                     }
                 }
 
@@ -3136,7 +3011,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     if (!$type) return;
 
                     $folder = $type->getFolder();
+                    $selectedProjectIds = array_values(array_filter($this->exportModpackProjectIds));
+                    $selectedRecords = empty($selectedProjectIds)
+                        ? collect()
+                        : $this->getInstalledRecordsByIds($selectedProjectIds);
                     $metadata = $this->getInstalledModsMetadata();
+                    if (!empty($selectedProjectIds)) {
+                        $metadata = array_values(array_filter(
+                            $metadata,
+                            fn ($mod) => in_array($mod['project_id'] ?? '', $selectedProjectIds, true)
+                        ));
+                    }
 
                     // Build modrinth.index.json files array
                     $indexFiles = [];
@@ -3182,13 +3067,23 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     // Add local (untracked) jar files to overrides/mods/
                     $managedFiles = collect($metadata)->pluck('filename')
                         ->map(fn ($f) => strtolower(str_replace('.disabled', '', $f)))->toArray();
+                    $selectedLocalFiles = $selectedRecords
+                        ->filter(fn ($record) => !empty($record['is_local']))
+                        ->pluck('filename')
+                        ->map(fn ($f) => strtolower(str_replace('.disabled', '', $f)))
+                        ->values()
+                        ->toArray();
                     try {
                         $fileRepository = app(DaemonFileRepository::class);
                         $dirFiles = $fileRepository->setServer($server)->getDirectory($folder);
                         foreach ($dirFiles as $df) {
                             $fn = $df['name'];
                             $clean = strtolower(str_replace('.disabled', '', $fn));
-                            if (in_array($clean, $managedFiles, true)) continue;
+                            if (!empty($selectedProjectIds)) {
+                                if (!in_array($clean, $selectedLocalFiles, true)) continue;
+                            } elseif (in_array($clean, $managedFiles, true)) {
+                                continue;
+                            }
                             if (!str_ends_with($clean, '.jar')) continue;
                             try {
                                 $content = Http::daemon($server->node)
@@ -3202,6 +3097,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     } catch (Exception $e) { /* skip if listing fails */ }
 
                     $zip->close();
+                    $this->exportModpackProjectIds = [];
 
                     return response()->download($tmpPath, 'modpack.mrpack', [
                         'Content-Type' => 'application/zip',
@@ -3626,6 +3522,155 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /**
      * @param string[] $ids
      */
+    public function setSelectedInstalledModsEnabled(array $ids, bool $enabled): void
+    {
+        try {
+            $records = $this->getInstalledRecordsByIds($ids);
+
+            if ($records->isEmpty()) {
+                return;
+            }
+
+            /** @var Server $server */
+            $server = Filament::getTenant();
+            $type = ModrinthProjectType::fromServer($server);
+            if (!$type) {
+                throw new Exception('Server does not support Modrinth mods or plugins');
+            }
+
+            $folder = $type->getFolder();
+            $renames = [];
+            $updates = [];
+
+            foreach ($records as $record) {
+                $currentlyDisabled = !empty($record['is_disabled']);
+                if ($enabled === !$currentlyDisabled) {
+                    continue;
+                }
+
+                $oldFilename = $this->validateFilename($record['filename'] ?? '');
+                if ($oldFilename === '') {
+                    continue;
+                }
+
+                $newFilename = $enabled
+                    ? preg_replace('/\.disabled$/i', '', $oldFilename)
+                    : $oldFilename . '.disabled';
+
+                if (!$newFilename || strcasecmp($oldFilename, $newFilename) === 0) {
+                    continue;
+                }
+
+                $renames[] = [
+                    'from' => $folder . '/' . $oldFilename,
+                    'to' => $folder . '/' . $newFilename,
+                ];
+                $updates[] = [
+                    'project_id' => $record['project_id'] ?? '',
+                    'old_filename' => $oldFilename,
+                    'new_filename' => $newFilename,
+                    'is_disabled' => !$enabled,
+                ];
+            }
+
+            if (empty($renames)) {
+                return;
+            }
+
+            Http::daemon($server->node)
+                ->put("/api/servers/{$server->uuid}/files/rename", [
+                    'root' => '/',
+                    'files' => $renames,
+                ])
+                ->throw();
+
+            foreach ($updates as $update) {
+                $projectId = $update['project_id'];
+                if ($projectId === '' || str_starts_with($projectId, 'local_')) {
+                    continue;
+                }
+
+                $installedMod = $this->getInstalledMod($projectId);
+                if (!$installedMod) {
+                    continue;
+                }
+
+                PelicanModManager::saveModMetadata(
+                    $server,
+                    $projectId,
+                    $installedMod['project_slug'],
+                    $installedMod['project_title'],
+                    $installedMod['version_id'],
+                    $installedMod['version_number'],
+                    $update['new_filename'],
+                    $installedMod['author'] ?? null
+                );
+            }
+
+            $this->invalidateMetadataCache();
+            $this->versionsCache = [];
+
+            foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+                $cacheKey = $prefix . $server->uuid;
+                $cachedItems = cache()->get($cacheKey);
+                if (!is_array($cachedItems)) continue;
+
+                $cachedItems = array_map(function (array $item) use ($updates) {
+                    foreach ($updates as $update) {
+                        $sameProject = ($item['project_id'] ?? null) === $update['project_id'];
+                        $sameFile = strcasecmp($item['filename'] ?? '', $update['old_filename']) === 0;
+                        if (!$sameProject && !$sameFile) {
+                            continue;
+                        }
+
+                        $item['filename'] = $update['new_filename'];
+                        $item['is_disabled'] = $update['is_disabled'];
+                        if (str_starts_with($update['project_id'], 'local_')) {
+                            $cleanFilename = str_replace('.disabled', '', $update['new_filename']);
+                            $item['project_id'] = 'local_' . md5($update['new_filename']);
+                            $item['title'] = basename($cleanFilename, '.jar');
+                        }
+                        if (isset($item['metadata']) && is_array($item['metadata'])) {
+                            $item['metadata']['filename'] = $update['new_filename'];
+                        }
+
+                        break;
+                    }
+
+                    return $item;
+                }, $cachedItems);
+
+                cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
+            }
+
+            $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid);
+            if (!is_array($resolvedItems)) {
+                $resolvedItems = cache()->get("pmm_basic_installed_{$server->uuid}", []);
+            }
+            $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
+                ->contains(fn ($item) => !empty($item['is_disabled']));
+            if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
+                $this->installedStatusFilter = 'all';
+            }
+
+            Notification::make()
+                ->title($enabled ? 'Mods enabled' : 'Mods disabled')
+                ->body(($enabled ? 'Enabled ' : 'Disabled ') . count($updates) . ' selected mod' . (count($updates) === 1 ? '.' : 's.'))
+                ->success()
+                ->send();
+        } catch (Exception $e) {
+            report($e);
+            Notification::make()
+                ->title($enabled ? 'Failed to enable mods' : 'Failed to disable mods')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    /**
+     * @param string[] $ids
+     */
     protected function getInstalledRecordsByIds(array $ids): \Illuminate\Support\Collection
     {
         if (empty($ids)) {
@@ -3957,46 +4002,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->components([
                 TextEntry::make('custom_styles')
                     ->hiddenLabel()
-                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style><script>
-                        (() => {
-                            if (window.pmmSelectionLabelObserver) return;
-
-                            const rewriteSelectionLabels = () => {
-                                document.querySelectorAll('.fi-ta-selection-indicator').forEach((indicator) => {
-                                    const walker = document.createTreeWalker(indicator, NodeFilter.SHOW_TEXT);
-                                    const nodes = [];
-                                    let node;
-
-                                    while ((node = walker.nextNode())) {
-                                        nodes.push(node);
-                                    }
-
-                                    nodes.forEach((textNode) => {
-                                        const nextValue = textNode.nodeValue.replace(
-                                            /\\b(\\d+)\\s+(?:records?|projects?|mods?)\\s+selected\\b/gi,
-                                            (_, count) => count + ' mods selected'
-                                        );
-
-                                        if (nextValue !== textNode.nodeValue) {
-                                            textNode.nodeValue = nextValue;
-                                        }
-                                    });
-                                });
-                            };
-
-                            const scheduleRewrite = () => window.requestAnimationFrame(rewriteSelectionLabels);
-                            const observer = new MutationObserver(scheduleRewrite);
-
-                            if (document.body) {
-                                observer.observe(document.body, { childList: true, characterData: true, subtree: true });
-                            }
-
-                            document.addEventListener('livewire:navigated', scheduleRewrite);
-                            document.addEventListener('livewire:updated', scheduleRewrite);
-                            window.pmmSelectionLabelObserver = observer;
-                            scheduleRewrite();
-                        })();
-                    </script></div>")),
+                    ->state(fn () => new HtmlString("<div class=\"modrinth-custom-styles\"><style>" . $this->getDynamicStyles() . "</style></div>")),
                 TextEntry::make('import_progress')
                     ->hidden(fn () => !$this->isImporting)
                     ->hiddenLabel()
@@ -4187,6 +4193,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     ->hidden(fn () => $this->activeTab !== 'installed' || !$this->installedDataReady)
                     ->state(fn () => new HtmlString($this->renderInstalledFilterBar())),
                 EmbeddedTable::make(),
+                TextEntry::make('installed_selection_bar')
+                    ->hiddenLabel()
+                    ->hidden(fn () => $this->activeTab !== 'installed')
+                    ->state(fn () => new HtmlString($this->renderInstalledSelectionBar())),
             ]);
     }
 
@@ -4202,20 +4212,29 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             ->mapWithKeys(fn ($item) => [
                 (string)($item['project_id'] ?? '') => [
                     'title' => $item['title'] ?? 'Selected mod',
-                    'icon_url' => $item['icon_url'] ?? null,
+                    'filename' => $item['filename'] ?? '',
+                    'slug' => $item['slug'] ?? '',
+                    'project_type' => $item['project_type'] ?? 'mod',
+                    'is_disabled' => !empty($item['is_disabled']),
+                    'is_local' => !empty($item['is_local']),
                 ],
             ])
             ->filter(fn ($item, $key) => $key !== '')
             ->toArray();
         $itemsJson = base64_encode(json_encode($itemMap) ?: '{}');
 
-        $xSvg = "<svg width='18' height='18' viewBox='0 0 20 20' fill='currentColor'><path fill-rule='evenodd' d='M4.293 4.293a1 1 0 0 1 1.414 0L10 8.586l4.293-4.293a1 1 0 1 1 1.414 1.414L11.414 10l4.293 4.293a1 1 0 0 1-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 0 1-1.414-1.414L8.586 10 4.293 5.707a1 1 0 0 1 0-1.414' clip-rule='evenodd'/></svg>";
+        $shareSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='18' cy='5' r='3'/><circle cx='6' cy='12' r='3'/><circle cx='18' cy='19' r='3'/><path d='M8.59 13.51l6.83 3.98M15.41 6.51L8.59 10.49'/></svg>";
+        $enableSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2v10'/><path d='M18.4 6.6a9 9 0 1 1-12.8 0'/></svg>";
+        $disableSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2v10'/><path d='M18.4 6.6a9 9 0 0 1 1.1 11.3'/><path d='M5.6 6.6a9 9 0 0 0 11.6 13.6'/><path d='M2 2l20 20'/></svg>";
         $trashSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6'/></svg>";
+        $copySvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='14' height='14' x='8' y='8' rx='2' ry='2'/><path d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/></svg>";
+        $exportSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
 
         return <<<HTML
             <div
                 x-data="{
                     selected: [],
+                    shareOpen: false,
                     items: JSON.parse(atob('{$itemsJson}')),
                     init() {
                         const refresh = () => this.refreshSelection();
@@ -4242,15 +4261,46 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     selectedList() {
                         return this.selected;
                     },
+                    selectedItems() {
+                        return this.selectedList()
+                            .map((id) => this.items[id])
+                            .filter(Boolean);
+                    },
                     count() {
                         return this.selectedList().length;
                     },
-                    visibleItems() {
-                        return this.selectedList().slice(0, 3).map((id) => this.items[id] || { title: 'Selected mod', icon_url: null });
+                    allEnabled() {
+                        const items = this.selectedItems();
+                        return items.length > 0 && items.every((item) => !item.is_disabled);
                     },
-                    avatarWidth() {
-                        const count = this.count();
-                        return count > 3 ? 104 : Math.max(32, Math.min(3, count) * 24 + 8);
+                    allDisabled() {
+                        const items = this.selectedItems();
+                        return items.length > 0 && items.every((item) => item.is_disabled);
+                    },
+                    markSelected(enabled) {
+                        this.selectedItems().forEach((item) => item.is_disabled = !enabled);
+                    },
+                    projectUrl(item) {
+                        if (!item || item.is_local || !item.slug) return '';
+                        return 'https://modrinth.com/' + (item.project_type || 'mod') + '/' + item.slug;
+                    },
+                    copyShare(format) {
+                        const items = this.selectedItems();
+                        const lines = items.map((item) => {
+                            const title = item.title || 'Selected mod';
+                            const filename = item.filename || title;
+                            const url = this.projectUrl(item);
+
+                            if (format === 'names') return title;
+                            if (format === 'files') return filename;
+                            if (format === 'links') return url || title;
+                            if (format === 'markdown') return url ? '[' + title + '](' + url + ')' : title;
+
+                            return title;
+                        }).filter(Boolean);
+
+                        navigator.clipboard?.writeText(lines.join('\n'));
+                        this.shareOpen = false;
                     }
                 }"
                 x-show="count() > 0"
@@ -4259,30 +4309,35 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 role="toolbar"
                 aria-label="Selection actions"
             >
-                <div class="pmm-selection-avatars" :style="'width:' + avatarWidth() + 'px'">
-                    <template x-for="(item, index) in visibleItems()" :key="selectedList()[index]">
-                        <div class="pmm-selection-avatar" :title="item.title" :style="'left:' + (index * 24) + 'px;z-index:' + (3 - index)">
-                            <template x-if="item.icon_url">
-                                <img :src="item.icon_url" :alt="item.title" loading="eager">
-                            </template>
-                            <template x-if="!item.icon_url">
-                                <span x-text="(item.title || '?').charAt(0).toUpperCase()"></span>
-                            </template>
-                        </div>
-                    </template>
-                    <div x-show="count() > 3" x-cloak class="pmm-selection-avatar" style="left:72px;z-index:0;" x-text="'+' + (count() - 3)"></div>
-                </div>
                 <span class="pmm-selection-count" x-text="count() === 1 ? '1 mod selected' : count() + ' mods selected'"></span>
                 <div class="pmm-selection-divider"></div>
                 <button type="button" class="pmm-selection-button" x-on:click="\$wire.clearInstalledSelection(); document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => { box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true })); }); selected = []">
-                    {$xSvg}<span>Clear</span>
+                    <span>Clear</span>
                 </button>
-                <div class="pmm-selection-actions">
-                    <button type="button" class="pmm-selection-button pmm-selection-button-danger"
-                        x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallInstalledModsByIds(selectedList()) }">
-                        {$trashSvg}<span>Delete</span>
+                <div class="pmm-selection-spacer"></div>
+                <div class="pmm-selection-menu-wrap" x-on:click.outside="shareOpen = false">
+                    <button type="button" class="pmm-selection-button" x-on:click.stop="shareOpen = !shareOpen">
+                        {$shareSvg}<span>Share</span>
                     </button>
+                    <div class="pmm-selection-menu" x-show="shareOpen" x-cloak>
+                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('names')">{$copySvg}<span>Mod names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('files')">{$copySvg}<span>File names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('links')">{$copySvg}<span>Project links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" x-on:click="copyShare('markdown')">{$copySvg}<span>Markdown links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" x-on:click="shareOpen = false; \$wire.set('exportModpackProjectIds', selectedList()).then(() => \$wire.mountAction('export_modpack'))">{$exportSvg}<span>Export as modpack</span></button>
+                    </div>
                 </div>
+                <button type="button" class="pmm-selection-button" x-bind:disabled="allEnabled()" x-on:click="markSelected(true); \$wire.setSelectedInstalledModsEnabled(selectedList(), true)">
+                    {$enableSvg}<span>Enable</span>
+                </button>
+                <button type="button" class="pmm-selection-button" x-bind:disabled="allDisabled()" x-on:click="markSelected(false); \$wire.setSelectedInstalledModsEnabled(selectedList(), false)">
+                    {$disableSvg}<span>Disable</span>
+                </button>
+                <div class="pmm-selection-divider"></div>
+                <button type="button" class="pmm-selection-button pmm-selection-button-danger"
+                    x-on:click="if (confirm('Uninstall selected mods?')) { \$wire.uninstallInstalledModsByIds(selectedList()) }">
+                    {$trashSvg}<span>Delete</span>
+                </button>
             </div>
         HTML;
     }

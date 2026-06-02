@@ -688,6 +688,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     display: none !important;
                 }
 
+                .fi-ta input[type='checkbox']:focus,
+                .fi-ta input[type='checkbox']:focus-visible {
+                    outline: none !important;
+                    box-shadow: none !important;
+                }
+
                 .pmm-selection-bar {
                     position: fixed;
                     left: 50%;
@@ -3536,10 +3542,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     /**
      * @param string[] $ids
      */
-    public function setSelectedInstalledModsEnabled(array $ids, bool $enabled): void
+    public function setSelectedInstalledModsEnabled(bool $enabled): void
     {
         try {
-            $records = $this->getInstalledRecordsByIds($ids);
+            $records = method_exists($this, 'getSelectedTableRecords')
+                ? $this->getSelectedTableRecords()
+                : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
 
             if ($records->isEmpty()) {
                 return;
@@ -3680,6 +3688,19 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 ->danger()
                 ->send();
         }
+    }
+
+    public function prepareSelectedModpackExport(): void
+    {
+        $records = method_exists($this, 'getSelectedTableRecords')
+            ? $this->getSelectedTableRecords()
+            : $this->getInstalledRecordsByIds($this->selectedTableRecords ?? []);
+
+        $this->exportModpackProjectIds = $records
+            ->pluck('project_id')
+            ->filter()
+            ->values()
+            ->toArray();
     }
 
     /**
@@ -4132,7 +4153,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 event.preventDefault();
                                 if (shareFormat === 'export') {
                                     this.setMenuOpen(bar, false);
-                                    this.set(bar, 'exportModpackProjectIds', this.selected)
+                                    this.call(bar, 'prepareSelectedModpackExport')
                                         .then(() => this.call(bar, 'mountAction', 'export_modpack'));
                                     return;
                                 }
@@ -4157,6 +4178,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 this.call(bar, 'clearInstalledSelection');
                                 document.querySelectorAll('.fi-ta input[type=checkbox]:checked').forEach((box) => {
                                     box.checked = false;
+                                    box.indeterminate = false;
+                                    box.blur();
                                     box.dispatchEvent(new Event('change', { bubbles: true }));
                                 });
                                 this.refresh();
@@ -4166,12 +4189,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
                                 this.markSelected(bar, enabled);
-                                this.call(bar, 'setSelectedInstalledModsEnabled', this.selected, enabled);
+                                this.call(bar, 'setSelectedInstalledModsEnabled', enabled);
                                 return;
                             }
 
                             if (action === 'delete' && confirm('Uninstall selected mods?')) {
-                                this.call(bar, 'uninstallInstalledModsByIds', this.selected);
+                                this.call(bar, 'uninstallSelectedInstalledMods');
                             }
                         });
 
@@ -4425,7 +4448,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $enableSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2v10'/><path d='M18.4 6.6a9 9 0 1 1-12.8 0'/></svg>";
         $disableSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 2v10'/><path d='M18.4 6.6a9 9 0 0 1 1.1 11.3'/><path d='M5.6 6.6a9 9 0 0 0 11.6 13.6'/><path d='M2 2l20 20'/></svg>";
         $trashSvg = "<svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6'/></svg>";
-        $copySvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect width='14' height='14' x='8' y='8' rx='2' ry='2'/><path d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/></svg>";
+        $projectNamesSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h-1a2 2 0 0 1-2-2 2 2 0 0 1-2 2H6M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1M6 4h1a2 2 0 0 1 2 2 2 2 0 0 1 2-2h1M9 6v12'/></svg>";
+        $fileNamesSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z'/><path d='M14 2v6h6'/></svg>";
+        $projectLinksSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/><path d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/></svg>";
+        $markdownLinksSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m16 18 6-6-6-6M8 6l-6 6 6 6'/></svg>";
         $exportSvg = "<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/><polyline points='7 10 12 15 17 10'/><line x1='12' y1='15' x2='12' y2='3'/></svg>";
 
         return <<<HTML
@@ -4447,10 +4473,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         {$shareSvg}<span>Share</span>
                     </button>
                     <div class="pmm-selection-menu" data-pmm-selection-menu>
-                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="names">{$copySvg}<span>Mod names</span></button>
-                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="files">{$copySvg}<span>File names</span></button>
-                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="links">{$copySvg}<span>Project links</span></button>
-                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="markdown">{$copySvg}<span>Markdown links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="names">{$projectNamesSvg}<span>Project names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="files">{$fileNamesSvg}<span>File names</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="links">{$projectLinksSvg}<span>Project links</span></button>
+                        <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="markdown">{$markdownLinksSvg}<span>Markdown links</span></button>
                         <button type="button" class="pmm-selection-menu-item" data-pmm-selection-share="export">{$exportSvg}<span>Export as modpack</span></button>
                     </div>
                 </div>

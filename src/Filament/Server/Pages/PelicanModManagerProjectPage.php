@@ -4237,30 +4237,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             const component = livewire.find(id);
                             if (!component) continue;
 
-                            const wire = component.$wire || component;
-                            fallback ??= wire;
+                            fallback ??= component;
 
                             const data = component.canonical || component.ephemeral || component.serverMemo?.data || component.snapshot?.data || {};
                             if (
                                 Object.prototype.hasOwnProperty.call(data, 'installedBulkSelectionJson')
                                 || Object.prototype.hasOwnProperty.call(data, 'installedSearch')
                                 || Object.prototype.hasOwnProperty.call(data, 'activeTab')
-                                || ('installedBulkSelectionJson' in wire)
-                                || ('installedSearch' in wire)
-                                || ('activeTab' in wire)
                             ) {
-                                return wire;
+                                return component;
                             }
                         }
 
                         return fallback;
                     },
                     call(bar, method, ...args) {
-                        const wire = this.getWire(bar);
-                        if (!wire) return Promise.resolve(null);
-                        const promise = typeof wire.call === 'function'
-                            ? wire.call(method, ...args)
-                            : (typeof wire[method] === 'function' ? wire[method](...args) : null);
+                        const component = this.getWire(bar);
+                        if (!component) return Promise.resolve(null);
+                        const promise = typeof component.call === 'function'
+                            ? component.call(method, ...args)
+                            : (typeof component.$wire?.$call === 'function' ? component.$wire.$call(method, ...args) : null);
 
                         return Promise.resolve(promise).catch((error) => {
                             console.error('Pelican Mod Manager selection action failed', method, error);
@@ -4268,11 +4264,11 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         });
                     },
                     fireEvent(bar, event, payload = {}) {
-                        const wire = this.getWire(bar);
-                        if (!wire) return Promise.resolve(null);
-                        const promise = typeof wire.dispatch === 'function'
-                            ? wire.dispatch(event, payload)
-                            : (typeof wire.emit === 'function' ? wire.emit(event, payload) : null);
+                        const component = this.getWire(bar);
+                        if (!component) return Promise.resolve(null);
+                        const promise = typeof component.dispatch === 'function'
+                            ? component.dispatch(event, payload)
+                            : (typeof component.$wire?.$dispatch === 'function' ? component.$wire.$dispatch(event, payload) : null);
 
                         return Promise.resolve(promise).catch((error) => {
                             console.error('Pelican Mod Manager selection event failed', event, error);
@@ -4280,9 +4276,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         });
                     },
                     set(bar, property, value) {
-                        const wire = this.getWire(bar);
-                        if (!wire) return Promise.resolve(null);
-                        if (typeof wire.set === 'function') return Promise.resolve(wire.set(property, value));
+                        const component = this.getWire(bar);
+                        if (!component) return Promise.resolve(null);
+                        if (typeof component.set === 'function') return Promise.resolve(component.set(property, value));
+                        if (typeof component.$wire?.$set === 'function') return Promise.resolve(component.$wire.$set(property, value));
                         return this.call(bar, 'set', property, value);
                     },
                     projectUrl(item) {

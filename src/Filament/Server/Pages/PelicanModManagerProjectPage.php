@@ -2395,14 +2395,43 @@ class PelicanModManagerProjectPage extends Page implements HasTable
     }
 
     /**
-     * Triggered lazily from the filter bar's x-init after the page renders.
-     * Uses a 5-minute Laravel cache so repeated calls (filter clicks, search, etc.) are instant.
-     *
-     * Key speed trick: we know every Modrinth project_id from the local metadata file
-     * (no network needed). So we fire all per-mod version requests in parallel via
-     * Http::pool() at the same time as the Wings file-listing + Modrinth bulk-projects
-     * calls inside getInstalledModsResolvedList(). The version pool finishes in ~1s
-     * regardless of mod count, eliminating the previous N × 0.5-1s sequential wait.
+     * Hydrate installed rows with Modrinth project/team data, then start the
+     * slower update-version checks in a separate request so icons/authors can
+     * repaint without waiting for version API batches.
+     */
+    public function enrichInstalledMods(): void
+    {
+        if ($this->activeTab !== 'installed' || $this->installedEnriched) {
+            return;
+        }
+
+        /** @var Server $server */
+        $server = Filament::getTenant();
+        $type = ModrinthProjectType::fromServer($server);
+        if (!$type) {
+            $this->installedEnriched = true;
+            $this->installedUpdatesChecked = true;
+            return;
+        }
+
+        $this->getInstalledModsResolvedList($server, $type);
+        $this->installedEnriched = true;
+
+        $cachedUpdateProjectIds = cache()->get("pmm_update_project_ids_{$server->uuid}", []);
+        if (is_array($cachedUpdateProjectIds)) {
+            $this->installedUpdateProjectIds = array_fill_keys($cachedUpdateProjectIds, true);
+            $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        }
+
+        $this->installedUpdatesChecked = cache()->get("pmm_update_check_complete_{$server->uuid}", false) === true;
+        if (!$this->installedUpdatesChecked) {
+            $this->js("setTimeout(() => \$wire.call('checkInstalledUpdates'), 50)");
+        }
+    }
+
+    /**
+     * Check update state in batches after the installed rows have already been
+     * enriched. Version APIs stay out of first paint and icon/author hydration.
      */
     public function checkInstalledUpdates(): void
     {
@@ -2417,8 +2446,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         $completeCacheKey = "pmm_update_check_complete_{$server->uuid}";
 
-        // Warm icons, author names/avatars, and local jars first. Update checks
-        // are chunked so this request does not fan out across every project at once.
+        // Reuse the enriched list if it is already cached. Update checks are
+        // chunked so this request does not fan out across every project at once.
         $items = $this->getInstalledModsResolvedList($server, $type);
         $this->installedEnriched = true;
 

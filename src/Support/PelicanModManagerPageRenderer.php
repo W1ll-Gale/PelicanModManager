@@ -956,7 +956,7 @@ class PelicanModManagerPageRenderer
                         if (data.installedEnriched) return;
 
                         this.updateCheckStarted = true;
-                        window.setTimeout(() => this.call(bar, 'checkInstalledUpdates'), 75);
+                        window.setTimeout(() => this.call(bar, 'enrichInstalledMods'), 750);
                     },
                     fireEvent(bar, event, payload = {}) {
                         const component = this.getWire(bar);
@@ -1286,6 +1286,11 @@ class PelicanModManagerPageRenderer
             ? e(url('/server/' . rawurlencode((string) $server->getRouteKey()) . '/files') . '?path=' . rawurlencode($modType->getFolder()))
             : '#';
 
+        // ── Lazy enrichment trigger: paint metadata first, then hydrate icons/authors without waiting on update checks. ──
+        $enrichmentTrigger = $this->installedEnriched
+            ? ''
+            : "<div wire:init='enrichInstalledMods' style='display:none' aria-hidden='true'></div>";
+
         // ── Row 1: search input (left, wide) + Open folder + Upload files (right) ──
         $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
         $searchInput = "<div style='flex:1;position:relative;'>"
@@ -1377,7 +1382,7 @@ class PelicanModManagerPageRenderer
             . "<div style='display:flex;gap:8px;align-items:center;'>{$rightBtns}</div>"
             . "</div>";
 
-        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$row1}{$row2}</div>";
+        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$enrichmentTrigger}{$row1}{$row2}</div>";
         };
     }
 

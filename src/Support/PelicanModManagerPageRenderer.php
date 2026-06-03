@@ -1009,15 +1009,19 @@ class PelicanModManagerPageRenderer
                         const count = this.selected.length;
 
                         this.getBars().forEach((bar) => {
+                            const countEl = bar.querySelector('[data-pmm-selection-count]');
+                            const enableButton = bar.querySelector('[data-pmm-selection-action="enable"]');
+                            const disableButton = bar.querySelector('[data-pmm-selection-action="disable"]');
+                            if (!countEl || !enableButton || !disableButton) return;
+
                             const items = this.getSelectedItems(bar);
                             const allEnabled = items.length > 0 && items.every((item) => !item.is_disabled);
                             const allDisabled = items.length > 0 && items.every((item) => item.is_disabled);
 
                             bar.classList.toggle('pmm-selection-bar--active', count > 0);
-                            bar.querySelector('[data-pmm-selection-count]').textContent =
-                                count === 1 ? '1 mod selected' : count + ' mods selected';
-                            bar.querySelector('[data-pmm-selection-action="enable"]').disabled = allEnabled;
-                            bar.querySelector('[data-pmm-selection-action="disable"]').disabled = allDisabled;
+                            countEl.textContent = count === 1 ? '1 mod selected' : count + ' mods selected';
+                            enableButton.disabled = allEnabled;
+                            disableButton.disabled = allDisabled;
 
                             if (count === 0) {
                                 this.setMenuOpen(bar, false);

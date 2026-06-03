@@ -985,6 +985,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                 /* Disabled-row grayscale */
                 .pmm-row-disabled {
+                    filter: none !important;
+                    opacity: 1 !important;
+                }
+                .pmm-row-disabled > td:not(.fi-ta-selection-cell) {
                     filter: grayscale(1) !important;
                     opacity: 0.45 !important;
                 }
@@ -3798,6 +3802,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
                 $this->installedStatusFilter = 'all';
             }
+            $this->clearInstalledSelection();
 
             Notification::make()
                 ->title($enabled ? 'Mods enabled' : 'Mods disabled')
@@ -4383,8 +4388,17 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             row.classList.add('pmm-selection-cleared');
                             row.querySelectorAll('.fi-selected').forEach((node) => node.classList.remove('fi-selected'));
                             row.classList.toggle('pmm-row-disabled', !enabled);
-                            row.style.filter = enabled ? '' : 'grayscale(1)';
-                            row.style.opacity = enabled ? '' : '0.45';
+                            row.style.filter = '';
+                            row.style.opacity = '';
+                            row.querySelectorAll('td').forEach((cell) => {
+                                if (cell.classList.contains('fi-ta-selection-cell')) {
+                                    cell.style.filter = '';
+                                    cell.style.opacity = '';
+                                    return;
+                                }
+                                cell.style.filter = enabled ? '' : 'grayscale(1)';
+                                cell.style.opacity = enabled ? '' : '0.45';
+                            });
 
                             const toggle = row.querySelector('.pmm-toggle-switch');
                             if (toggle) {

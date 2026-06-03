@@ -3196,6 +3196,43 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         JS);
     }
 
+    public function setInstalledFilter(string $filter): void
+    {
+        $this->installedStatusFilter = $filter;
+    }
+
+    public function setInstalledSort(string $mode): void
+    {
+        $allowed = ['alpha_asc', 'alpha_desc', 'newest', 'oldest'];
+        if (in_array($mode, $allowed, true)) {
+            $this->installedSortMode = $mode;
+        }
+    }
+
+    public function setBrowseSort(string $mode): void
+    {
+        $allowed = ['relevance', 'downloads', 'follows', 'newest', 'updated'];
+        if (in_array($mode, $allowed, true)) {
+            $this->browseSortMode = $mode;
+            $this->setBrowsePage(1);
+        }
+    }
+
+    public function setBrowsePageSize(int $size): void
+    {
+        $allowed = [5, 10, 15, 20, 50, 100];
+        if (in_array($size, $allowed, true)) {
+            $this->browsePageSize = $size;
+            $this->setBrowsePage(1);
+        }
+    }
+
+    public function setBrowsePage(int $page): void
+    {
+        $this->browseCurrentPage = max(1, $page);
+        $this->gotoPage($this->browseCurrentPage);
+    }
+
     public function updatedBrowseSearch(): void
     {
         $this->setBrowsePage(1);

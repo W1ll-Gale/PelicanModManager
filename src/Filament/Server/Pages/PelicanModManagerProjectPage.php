@@ -8,6 +8,10 @@ use App\Repositories\Daemon\DaemonFileRepository;
 use App\Traits\Filament\BlockAccessInConflict;
 use MrBytesized\PelicanModManager\Enums\ModrinthProjectType;
 use MrBytesized\PelicanModManager\Facades\PelicanModManager;
+use MrBytesized\PelicanModManager\Services\InstalledModsService;
+use MrBytesized\PelicanModManager\Services\ModManagerFileService;
+use MrBytesized\PelicanModManager\Services\ModpackService;
+use MrBytesized\PelicanModManager\Services\ModrinthClient;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -152,6 +156,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     public function mount(?string $modTab = null): void
     {
+        $this->installedUpdateCheckBatchSize = (int) config('pelican-mod-manager.installed.update_check_batch_size', $this->installedUpdateCheckBatchSize);
+
         if (in_array($modTab, ['installed', 'browse'], true)) {
             $this->activeTab = $modTab;
         }
@@ -1139,20 +1145,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function getMetadataOnlyList(): array
     {
-        return collect($this->getInstalledModsMetadata())->map(fn ($mod) => [
-            'project_id'    => $mod['project_id'],
-            'slug'          => $mod['project_slug'],
-            'title'         => $mod['project_title'],
-            'filename'      => $mod['filename'],
-            'installed_at'  => $mod['installed_at'],
-            'author'        => $mod['author'] ?? '',
-            'author_avatar' => null,
-            'icon_url'      => null,
-            'project_type'  => 'mod',
-            'is_local'      => false,
-            'is_disabled'   => str_ends_with(strtolower($mod['filename']), '.disabled'),
-            'metadata'      => $mod,
-        ])->toArray();
+        return app(InstalledModsService::class)->metadataOnlyList($this->getInstalledModsMetadata());
     }
 
     /**
@@ -1163,6 +1156,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function getBasicInstalledList(Server $server, ModrinthProjectType $type): array
     {
+        return app(InstalledModsService::class)->basicList($server, $type, $this->getInstalledModsMetadata());
+
         $cacheKey = "pmm_basic_installed_{$server->uuid}";
         return cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
             $fileRepository = app(DaemonFileRepository::class);
@@ -1222,6 +1217,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function getInstalledModsResolvedList(Server $server, ModrinthProjectType $type): array
     {
+        return app(InstalledModsService::class)->resolvedList($server, $type, $this->getInstalledModsMetadata());
+
         $cacheKey = "modrinth_installed_resolved_list_" . $server->uuid;
         
         return cache()->remember($cacheKey, now()->addMinutes(5), function () use ($server, $type) {
@@ -1587,11 +1584,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             // Use Laravel cache (not just in-memory) so version data survives across
             // Livewire requests — without this every button click re-fetches the
             // Modrinth API for every installed mod, making the UI feel very slow.
-            $cacheKey = "pmm_versions_{$projectId}_{$server->uuid}";
-            $this->versionsCache[$projectId] = cache()->remember(
-                $cacheKey,
-                now()->addMinutes(10),
-                fn () => PelicanModManager::getProjectVersions($projectId, $server)
+            $loader = PelicanModManager::getLoaderFromServer($server);
+            $this->versionsCache[$projectId] = app(ModrinthClient::class)->getProjectVersions(
+                $projectId,
+                PelicanModManager::getMinecraftVersion($server),
+                $loader['name'] ?? null,
+                $server
             );
         }
 
@@ -1608,6 +1606,16 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function warmVersionsCacheParallel(Server $server, array $projectIds): void
     {
+        $loader = PelicanModManager::getLoaderFromServer($server);
+        $this->versionsCache = app(ModrinthClient::class)->warmProjectVersions(
+            $server,
+            $projectIds,
+            PelicanModManager::getMinecraftVersion($server),
+            $loader['name'] ?? null,
+            $this->versionsCache
+        );
+        return;
+
         if (empty($projectIds)) return;
 
         $loader     = PelicanModManager::getLoaderFromServer($server);
@@ -1665,50 +1673,21 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function getPrimaryFile(array $files): ?array
     {
-        foreach ($files as $file) {
-            if (!empty($file['primary'])) {
-                return $file;
-            }
-        }
-
-        return null;
+        return app(ModrinthClient::class)->getPrimaryFile($files);
     }
 
     /** @return array<string, true> */
     protected function getInstalledModrinthSha1s(Server $server): array
     {
-        $hashes = [];
         $metadata = $this->getInstalledModsMetadata();
-        $projectIds = collect($metadata)
-            ->pluck('project_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->toArray();
-        $this->warmVersionsCacheParallel($server, $projectIds);
+        $loader = PelicanModManager::getLoaderFromServer($server);
 
-        foreach ($metadata as $mod) {
-            $projectId = $mod['project_id'] ?? '';
-            $versionId = $mod['version_id'] ?? '';
-            if ($projectId === '' || $versionId === '') {
-                continue;
-            }
-
-            $versions = $this->getCachedVersions($projectId);
-            $version = collect($versions)->firstWhere('id', $versionId);
-            if (!$version || empty($version['files']) || !is_array($version['files'])) {
-                continue;
-            }
-
-            foreach ($version['files'] as $file) {
-                $sha1 = $file['hashes']['sha1'] ?? null;
-                if (is_string($sha1) && $sha1 !== '') {
-                    $hashes[strtolower($sha1)] = true;
-                }
-            }
-        }
-
-        return $hashes;
+        return app(InstalledModsService::class)->installedModrinthSha1s(
+            $server,
+            $metadata,
+            PelicanModManager::getMinecraftVersion($server),
+            $loader['name'] ?? null
+        );
     }
 
     /**
@@ -1716,11 +1695,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     protected function validateFilename(string $filename): string
     {
-        if ($filename === '' || $filename === '.' || str_contains($filename, "\0") || str_contains($filename, '..') || str_contains($filename, '/') || str_contains($filename, '\\')) {
-            throw new Exception('Invalid filename: potential path traversal detected');
-        }
-
-        return basename($filename);
+        return app(ModManagerFileService::class)->validateFilename($filename);
     }
 
     /**
@@ -1738,7 +1713,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         array $primaryFile,
         ?array $installedMod = null
     ): void {
-        $fileRepository = app(DaemonFileRepository::class);
+        $files = app(ModManagerFileService::class);
 
         $safeNewFilename = $this->validateFilename($primaryFile['filename']);
         $oldFilename = $installedMod ? $this->validateFilename($installedMod['filename']) : null;
@@ -1750,10 +1725,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         $folder = $type->getFolder();
 
-        $fileRepository
-            ->setServer($server)
-            ->pull($primaryFile['url'], $folder)
-            ->throw();
+        $files->pull($server, $primaryFile['url'], $folder);
 
         // Slug is required by saveModMetadata. If it's missing from $record
         // (e.g. called from the version-change modal which only passes projectId+title),
@@ -1774,12 +1746,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         if (!$saved) {
             if (!$oldFilename || $oldFilename !== $safeNewFilename) {
                 try {
-                    Http::daemon($server->node)
-                        ->post("/api/servers/{$server->uuid}/files/delete", [
-                            'root' => '/',
-                            'files' => [$folder . '/' . $safeNewFilename],
-                        ])
-                        ->throw();
+                    $files->deleteFiles($server, [$folder . '/' . $safeNewFilename]);
                 } catch (Exception $rollbackException) {
                     report($rollbackException);
                 }
@@ -1790,20 +1757,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
         if ($oldFilename && $oldFilename !== $safeNewFilename) {
             try {
-                Http::daemon($server->node)
-                    ->post("/api/servers/{$server->uuid}/files/delete", [
-                        'root' => '/',
-                        'files' => [$folder . '/' . $oldFilename],
-                    ])
-                    ->throw();
+                $files->deleteFiles($server, [$folder . '/' . $oldFilename]);
             } catch (Exception $deleteException) {
                 try {
-                    Http::daemon($server->node)
-                        ->post("/api/servers/{$server->uuid}/files/delete", [
-                            'root' => '/',
-                            'files' => [$folder . '/' . $safeNewFilename],
-                        ])
-                        ->throw();
+                    $files->deleteFiles($server, [$folder . '/' . $safeNewFilename]);
                 } catch (Exception $rollbackException) {
                     report($rollbackException);
                 }
@@ -1924,6 +1881,22 @@ class PelicanModManagerProjectPage extends Page implements HasTable
      */
     private function removeInstalledRowsFromCaches(Server $server, array $projectIds = [], array $filenames = []): void
     {
+        $stats = app(InstalledModsService::class)->removeRowsFromCaches($server, $projectIds, $filenames);
+
+        foreach ($projectIds as $projectId) {
+            unset($this->installedUpdateProjectIds[$projectId]);
+            unset($this->versionsCache[$projectId]);
+        }
+        $this->installedHasUpdates = !empty($this->installedUpdateProjectIds);
+        $this->installedHasDisabled = $stats['has_disabled'] ?? false;
+        if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
+            $this->installedStatusFilter = 'all';
+        }
+
+        cache()->put("pmm_update_project_ids_{$server->uuid}", array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
+        cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
+        return;
+
         $projectIds = array_values(array_filter($projectIds));
         $filenames = array_map(fn ($filename) => strtolower(str_replace('.disabled', '', $filename)), array_filter($filenames));
 
@@ -1967,6 +1940,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
     private function addLocalInstalledRowToCaches(Server $server, ModrinthProjectType $type, string $filename): void
     {
+        $stats = app(InstalledModsService::class)->addLocalRowToCaches($server, $type, $filename);
+        $this->installedHasDisabled = $stats['has_disabled'] ?? $this->installedHasDisabled;
+        return;
+
         $isDisabled = str_ends_with(strtolower($filename), '.disabled');
         $cleanFilename = str_replace('.disabled', '', $filename);
         $row = [
@@ -2009,8 +1986,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $type ??= ModrinthProjectType::fromServer($server);
         if (!$type) return;
 
-        cache()->forget("modrinth_installed_resolved_list_" . $server->uuid);
-        cache()->forget("pmm_basic_installed_{$server->uuid}");
+        app(InstalledModsService::class)->forgetInstalledListCaches($server);
 
         $this->getBasicInstalledList($server, $type);
         $this->getInstalledModsResolvedList($server, $type);
@@ -3026,15 +3002,15 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             $versionData = [];
                             if ($sha1) {
                                 try {
-                                    $vr = Http::asJson()->timeout(10)->connectTimeout(5)->get("https://api.modrinth.com/v2/version_file/{$sha1}?algorithm=sha1");
-                                    if ($vr->successful()) {
-                                        $vd = $vr->json();
+                                    $versionMap = app(ModrinthClient::class)->getVersionsByHashes([$sha1], 'sha1');
+                                    $vd = $versionMap[strtolower($sha1)] ?? null;
+                                    if (is_array($vd)) {
                                         $pId = $vd['project_id'] ?? null;
                                         $vId = $vd['id'] ?? null;
                                         if ($pId && $vId) {
-                                            $pr = Http::asJson()->timeout(10)->connectTimeout(5)->get("https://api.modrinth.com/v2/project/{$pId}");
-                                            if ($pr->successful()) {
-                                                $pd = $pr->json();
+                                            $projectMap = app(ModrinthClient::class)->getProjectsMap([$pId]);
+                                            $pd = $projectMap[$pId] ?? null;
+                                            if (is_array($pd)) {
                                                 $projectId = $pId; $projectSlug = $pd['slug'] ?? ''; $projectName = $pd['title'] ?? $projectName;
                                                 $versionId = $vId; $versionNumber = $vd['version_number'] ?? '';
                                                 $projectIconUrl = $pd['icon_url'] ?? null;
@@ -3043,12 +3019,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                                 $existingMod = $this->getInstalledMod($projectId);
                                                 if ($existingMod && strcasecmp($existingMod['filename'] ?? '', $safeFilename) !== 0) {
                                                     try {
-                                                        Http::daemon($server->node)
-                                                            ->post("/api/servers/{$server->uuid}/files/delete", [
-                                                                'root' => '/',
-                                                                'files' => [$folder . '/' . $this->validateFilename($existingMod['filename'] ?? '')],
-                                                            ])
-                                                            ->throw();
+                                                        app(ModManagerFileService::class)->deleteFiles($server, [$folder . '/' . $this->validateFilename($existingMod['filename'] ?? '')]);
                                                     } catch (Exception $deleteException) {
                                                         Log::warning('Failed to remove replaced uploaded jar: ' . $deleteException->getMessage());
                                                     }
@@ -3386,8 +3357,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 $resolvedMods = [];
                 $filesToDelete = [];
                 if (!empty($this->importDownloadedMods)) {
-                    $chunks = array_chunk($this->importDownloadedMods, 50);
-                    $versionDataMap = [];
+                    $versionDataMap = app(ModpackService::class)->resolveDownloadedFilesBySha1($this->importDownloadedMods);
+                    $chunks = [];
 
                     foreach ($chunks as $c) {
                         $hashes = array_column($c, 'sha1');
@@ -3433,33 +3404,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     }
 
                     $projectIds = array_values(array_unique($projectIds));
-                    $projectDetailsMap = [];
-                    if (!empty($projectIds)) {
-                        $projectChunks = array_chunk($projectIds, 50);
-                        foreach ($projectChunks as $pChunk) {
-                            $idsParam = json_encode($pChunk);
-                            try {
-                                $projResponse = Http::asJson()
-                                    ->timeout(10)
-                                    ->connectTimeout(5)
-                                    ->throw()
-                                    ->get('https://api.modrinth.com/v2/projects', [
-                                        'ids' => $idsParam,
-                                    ])
-                                    ->json();
-
-                                if (is_array($projResponse)) {
-                                    foreach ($projResponse as $proj) {
-                                        if (isset($proj['id'])) {
-                                            $projectDetailsMap[$proj['id']] = $proj;
-                                        }
-                                    }
-                                }
-                            } catch (Exception $apiException) {
-                                Log::warning('Modrinth API bulk projects lookup failed: ' . $apiException->getMessage());
-                            }
-                        }
-                    }
+                    $projectDetailsMap = app(ModpackService::class)->getProjectsMap($projectIds);
 
                     $installedByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
 
@@ -3492,12 +3437,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 }
                 if (!empty($filesToDelete)) {
                     try {
-                        Http::daemon($server->node)
-                            ->post("/api/servers/{$server->uuid}/files/delete", [
-                                'root' => '/',
-                                'files' => array_values(array_unique($filesToDelete)),
-                            ])
-                            ->throw();
+                        app(ModManagerFileService::class)->deleteFiles($server, array_values(array_unique($filesToDelete)));
                     } catch (Exception $deleteException) {
                         Log::warning('Failed to remove replaced modpack jars: ' . $deleteException->getMessage());
                     }
@@ -3724,12 +3664,7 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 return;
             }
 
-            Http::daemon($server->node)
-                ->put("/api/servers/{$server->uuid}/files/rename", [
-                    'root' => '/',
-                    'files' => $renames,
-                ])
-                ->throw();
+            app(ModManagerFileService::class)->renameFiles($server, $renames);
 
             $metadataByProjectId = collect($this->getInstalledModsMetadata())->keyBy('project_id');
             $metadataUpdates = [];
@@ -4136,17 +4071,12 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                 $newFilename = str_replace('.disabled', '', $oldFilename);
             }
 
-            Http::daemon($server->node)
-                ->put("/api/servers/{$server->uuid}/files/rename", [
-                    'root' => '/',
-                    'files' => [
-                        [
-                            'from' => $folder . '/' . $oldFilename,
-                            'to' => $folder . '/' . $newFilename,
-                        ]
-                    ]
-                ])
-                ->throw();
+            app(ModManagerFileService::class)->renameFiles($server, [
+                [
+                    'from' => $folder . '/' . $oldFilename,
+                    'to' => $folder . '/' . $newFilename,
+                ],
+            ]);
 
             $cleanProjectId = str_starts_with($projectId, 'local_') ? null : $projectId;
             if ($cleanProjectId) {

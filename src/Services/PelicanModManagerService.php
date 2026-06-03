@@ -3,20 +3,23 @@
 namespace MrBytesized\PelicanModManager\Services;
 
 use App\Models\Server;
-use App\Repositories\Daemon\DaemonFileRepository;
 use MrBytesized\PelicanModManager\Enums\ModrinthProjectType;
 use Exception;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 class PelicanModManagerService
 {
+    public function __construct(
+        protected ModrinthClient $modrinth,
+        protected ModManagerFileService $files,
+    ) {}
+
     public function getMinecraftVersion(Server $server): ?string
     {
         $version = $server->variables()->where(fn ($builder) => $builder->where('env_variable', 'MINECRAFT_VERSION')->orWhere('env_variable', 'MC_VERSION'))->first()?->server_value;
 
         if (!$version || $version === 'latest') {
-            return $this->getLatestMinecraftVersion();
+            return $this->modrinth->getLatestMinecraftVersion();
         }
 
         return $version;
@@ -24,23 +27,7 @@ class PelicanModManagerService
 
     public function getLatestMinecraftVersion(): ?string
     {
-        return cache()->remember('modrinth:latest_minecraft_version', now()->addHour(), function () {
-            try {
-                /** @var array<int, mixed> $versions */
-                $versions = Http::asJson()
-                    ->timeout(5)
-                    ->connectTimeout(5)
-                    ->throw()
-                    ->get('https://api.modrinth.com/v2/tag/game_version')
-                    ->json();
-
-                return collect($versions)->filter(fn ($version) => $version['version_type'] === 'release')->first()['version'] ?? null;
-            } catch (Exception $exception) {
-                report($exception);
-
-                return null;
-            }
-        });
+        return $this->modrinth->getLatestMinecraftVersion();
     }
 
     /** @return array{icon: string, name: string, supported_project_types: string[], display_name: string}|null */
@@ -76,20 +63,7 @@ class PelicanModManagerService
     /** @return array<int, array{icon: string, name: string, supported_project_types: string[]}> */
     public function getLoaders(): array
     {
-        return cache()->remember('modrinth:loaders', now()->addHour(), function () {
-            try {
-                return Http::asJson()
-                    ->timeout(5)
-                    ->connectTimeout(5)
-                    ->throw()
-                    ->get('https://api.modrinth.com/v2/tag/loader')
-                    ->json();
-            } catch (Exception $exception) {
-                report($exception);
-
-                return [];
-            }
-        });
+        return $this->modrinth->getLoaders();
     }
 
     /** @return array{hits: array<int, array<string, mixed>>, total_hits: int} */
@@ -113,121 +87,16 @@ class PelicanModManagerService
         }
 
         $minecraftVersion = $this->getMinecraftVersion($server);
+        if (!$minecraftVersion) {
+            return [
+                'hits' => [],
+                'total_hits' => 0,
+            ];
+        }
+
         $minecraftLoader = $minecraftLoader['name'];
 
-        $limit = max(1, min(100, $limit));
-        $facets = [
-            ["categories:$minecraftLoader"],
-            ["versions:$minecraftVersion"],
-            ["project_type:{$projectType}"],
-        ];
-
-        $categories = array_values(array_filter($filters['categories'] ?? []));
-        if (!empty($categories)) {
-            $facets[] = array_map(fn ($category) => "categories:{$category}", $categories);
-        }
-
-        foreach (array_values(array_filter($filters['excluded_categories'] ?? [])) as $category) {
-            $facets[] = ["categories!={$category}"];
-        }
-
-        $environments = array_values(array_filter($filters['environments'] ?? []));
-        if (in_array('client', $environments, true)) {
-            $facets[] = ['client_side:required', 'client_side:optional'];
-        }
-        if (in_array('server', $environments, true)) {
-            $facets[] = ['server_side:required', 'server_side:optional'];
-        }
-
-        $excludedEnvironments = array_values(array_filter($filters['excluded_environments'] ?? []));
-        if (in_array('client', $excludedEnvironments, true)) {
-            $facets[] = ['client_side:unsupported'];
-        }
-        if (in_array('server', $excludedEnvironments, true)) {
-            $facets[] = ['server_side:unsupported'];
-        }
-
-        if (!empty($filters['open_source'])) {
-            $facets[] = ['open_source:true'];
-        }
-        if (!empty($filters['exclude_open_source'])) {
-            $facets[] = ['open_source:false'];
-        }
-
-        $excludedProjectIds = array_flip(array_values(array_filter($filters['exclude_project_ids'] ?? [])));
-        $requestLimit = !empty($excludedProjectIds) ? min(100, max($limit * 3, $limit + 10)) : $limit;
-
-        $data = [
-            'offset' => ($page - 1) * $limit,
-            'limit' => $requestLimit,
-            'facets' => json_encode($facets),
-        ];
-
-        if ($sortColumn === 'downloads') {
-            $data['index'] = 'downloads';
-        } elseif ($sortColumn === 'date_modified') {
-            $data['index'] = 'updated';
-        }
-
-        $filterKey = md5(json_encode($filters));
-        $key = "modrinth_projects:{$projectType}:$minecraftVersion:$minecraftLoader:$page:$limit:$filterKey";
-
-        if ($search) {
-            $data['query'] = $search;
-
-            $key .= ":$search";
-        }
-
-        if ($sortColumn) {
-            $key .= ":{$sortColumn}:{$sortDirection}";
-        }
-
-        $response = cache()->remember($key, now()->addMinutes(30), function () use ($data) {
-            try {
-                return Http::asJson()
-                    ->timeout(5)
-                    ->connectTimeout(5)
-                    ->throw()
-                    ->get('https://api.modrinth.com/v2/search', $data)
-                    ->json();
-            } catch (Exception $exception) {
-                report($exception);
-
-                return [
-                    'hits' => [],
-                    'total_hits' => 0,
-                ];
-            }
-        });
-
-        if (!empty($excludedProjectIds) && isset($response['hits']) && is_array($response['hits'])) {
-            $response['hits'] = collect($response['hits'])
-                ->reject(fn ($hit) => isset($excludedProjectIds[$hit['project_id'] ?? '']))
-                ->take($limit)
-                ->values()
-                ->toArray();
-            $response['total_hits'] = max(0, (int)($response['total_hits'] ?? 0) - count($excludedProjectIds));
-            $response['limit'] = count($response['hits']);
-        }
-
-        if ($sortColumn === 'title' || $sortColumn === 'author') {
-            $descending = $sortDirection === 'desc';
-            if (isset($response['hits']) && is_array($response['hits'])) {
-                $hits = collect($response['hits'])
-                    ->sortBy(function ($item) use ($sortColumn) {
-                        if ($sortColumn === 'title') {
-                            return strtolower($item['title'] ?? '');
-                        } else {
-                            return strtolower($item['author'] ?? '');
-                        }
-                    }, SORT_REGULAR, $descending)
-                    ->values()
-                    ->toArray();
-                $response['hits'] = $hits;
-            }
-        }
-
-        return $response;
+        return $this->modrinth->searchProjects($projectType, $minecraftVersion, $minecraftLoader, $page, $search, $sortColumn, $sortDirection, $filters, $limit);
     }
 
     /**
@@ -250,34 +119,7 @@ class PelicanModManagerService
             return [];
         }
 
-        $idsParam = json_encode($pageIds);
-        $modrinthProjects = cache()->remember('modrinth_bulk:' . md5($idsParam), now()->addMinutes(30), function () use ($idsParam) {
-            try {
-                return Http::asJson()
-                    ->timeout(10)
-                    ->connectTimeout(5)
-                    ->throw()
-                    ->get('https://api.modrinth.com/v2/projects', [
-                        'ids' => $idsParam,
-                    ])
-                    ->json();
-            } catch (Exception $exception) {
-                report($exception);
-
-                return [];
-            }
-        });
-
-        if (!is_array($modrinthProjects)) {
-            $modrinthProjects = [];
-        }
-
-        $modrinthMap = [];
-        foreach ($modrinthProjects as $project) {
-            if (isset($project['id'])) {
-                $modrinthMap[$project['id']] = $project;
-            }
-        }
+        $modrinthMap = $this->modrinth->getProjectsMap($pageIds);
 
         $installedModsById = [];
         foreach ($installedMods as $mod) {
@@ -335,33 +177,7 @@ class PelicanModManagerService
         $minecraftVersion = $this->getMinecraftVersion($server);
         $minecraftLoader = $minecraftLoader['name'];
 
-        $data = [
-            'game_versions' => "[\"$minecraftVersion\"]",
-            'loaders' => "[\"$minecraftLoader\"]",
-        ];
-
-        return cache()->remember("modrinth_versions:$projectId:$minecraftVersion:$minecraftLoader", now()->addMinutes(30), function () use ($projectId, $data) {
-            try {
-                $versions = Http::asJson()
-                    ->timeout(5)
-                    ->connectTimeout(5)
-                    ->throw()
-                    ->get("https://api.modrinth.com/v2/project/$projectId/version", $data)
-                    ->json();
-
-                if (is_array($versions) && !empty($versions)) {
-                    usort($versions, function ($a, $b) {
-                        return strcmp($b['date_published'] ?? '', $a['date_published'] ?? '');
-                    });
-                }
-
-                return $versions;
-            } catch (Exception $exception) {
-                report($exception);
-
-                return [];
-            }
-        });
+        return $this->modrinth->getProjectVersions($projectId, $minecraftVersion, $minecraftLoader, $server);
     }
 
     /**
@@ -375,53 +191,13 @@ class PelicanModManagerService
             throw new Exception("Server {$server->id} does not support Modrinth mods or plugins");
         }
 
-        return join_paths($type->getFolder(), '.modrinth-metadata.json');
+        return $this->files->metadataFilePath($server);
     }
 
     /** @return array<int, array{project_id: string, project_slug: string, project_title: string, version_id: string, version_number: string, filename: string, installed_at: string, author?: string}> */
     public function getInstalledModsMetadata(Server $server): array
     {
-        try {
-            $fileRepository = app(DaemonFileRepository::class);
-
-            $metadataPath = $this->getMetadataFilePath($server);
-            $content = $fileRepository->setServer($server)->getContent($metadataPath);
-            $metadata = json_decode($content, true);
-
-            if (!is_array($metadata) || !isset($metadata['installed_mods']) || !is_array($metadata['installed_mods'])) {
-                return [];
-            }
-
-            $validInstalledMods = [];
-            $requiredKeys = [
-                'project_id',
-                'project_slug',
-                'project_title',
-                'version_id',
-                'version_number',
-                'filename',
-                'installed_at',
-            ];
-
-            $requiredKeysFlipped = array_flip($requiredKeys);
-
-            foreach ($metadata['installed_mods'] as $entry) {
-                if (!is_array($entry)) {
-                    continue;
-                }
-
-                $missingKeys = array_diff_key($requiredKeysFlipped, $entry);
-                if (empty($missingKeys)) {
-                    $validInstalledMods[] = $entry;
-                }
-            }
-
-            return $validInstalledMods;
-        } catch (Exception $exception) {
-            report($exception);
-
-            return [];
-        }
+        return $this->files->readInstalledModsMetadata($server);
     }
 
     /**
@@ -435,8 +211,6 @@ class PelicanModManagerService
 
         try {
             return Cache::lock("modrinth_metadata:{$server->id}", 10)->block(5, function () use ($server, $mods) {
-                $fileRepository = app(DaemonFileRepository::class);
-
                 $installed = $this->getInstalledModsMetadata($server);
                 $installedMap = [];
                 foreach ($installed as $mod) {
@@ -463,17 +237,7 @@ class PelicanModManagerService
                     $installedMap[$projectId] = $modEntry;
                 }
 
-                $metadata = [
-                    'installed_mods' => array_values($installedMap),
-                ];
-
-                $metadataPath = $this->getMetadataFilePath($server);
-                $response = $fileRepository->setServer($server)->putContent(
-                    $metadataPath,
-                    json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
-                );
-
-                return !$response->failed();
+                return $this->files->writeInstalledModsMetadata($server, array_values($installedMap));
             }) === true;
         } catch (Exception $exception) {
             report($exception);
@@ -494,8 +258,6 @@ class PelicanModManagerService
     ): bool {
         try {
             return Cache::lock("modrinth_metadata:{$server->id}", 10)->block(5, function () use ($server, $projectId, $projectSlug, $projectTitle, $versionId, $versionNumber, $filename, $author) {
-                $fileRepository = app(DaemonFileRepository::class);
-
                 $metadata = [
                     'installed_mods' => $this->getInstalledModsMetadata($server),
                 ];
@@ -521,13 +283,7 @@ class PelicanModManagerService
 
                 $metadata['installed_mods'][] = $modEntry;
 
-                $metadataPath = $this->getMetadataFilePath($server);
-                $response = $fileRepository->setServer($server)->putContent(
-                    $metadataPath,
-                    json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
-                );
-
-                return !$response->failed();
+                return $this->files->writeInstalledModsMetadata($server, $metadata['installed_mods']);
             }) === true;
         } catch (Exception $exception) {
             report($exception);
@@ -540,8 +296,6 @@ class PelicanModManagerService
     {
         try {
             return Cache::lock("modrinth_metadata:{$server->id}", 10)->block(5, function () use ($server, $projectId) {
-                $fileRepository = app(DaemonFileRepository::class);
-
                 $metadata = [
                     'installed_mods' => $this->getInstalledModsMetadata($server),
                 ];
@@ -551,13 +305,7 @@ class PelicanModManagerService
                     ->values()
                     ->toArray();
 
-                $metadataPath = $this->getMetadataFilePath($server);
-                $response = $fileRepository->setServer($server)->putContent(
-                    $metadataPath,
-                    json_encode($metadata, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
-                );
-
-                return !$response->failed();
+                return $this->files->writeInstalledModsMetadata($server, $metadata['installed_mods']);
             }) === true;
         } catch (Exception $exception) {
             report($exception);

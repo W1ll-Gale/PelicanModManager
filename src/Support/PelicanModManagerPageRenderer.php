@@ -2,7 +2,6 @@
 
 namespace MrBytesized\PelicanModManager\Support;
 
-use App\Filament\Server\Resources\Files\Pages\ListFiles;
 use App\Models\Server;
 use Closure;
 use Filament\Facades\Filament;
@@ -1279,7 +1278,9 @@ class PelicanModManagerPageRenderer
         /** @var Server $server */
         $server   = Filament::getTenant();
         $modType  = ModrinthProjectType::fromServer($server);
-        $folderUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
+        $folderUrl = $modType
+            ? e(url('/server/' . rawurlencode((string) $server->getRouteKey()) . '/files') . '?path=' . rawurlencode($modType->getFolder()))
+            : '#';
 
         // ── Row 1: search input (left, wide) + Open folder + Upload files (right) ──
         $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";

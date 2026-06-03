@@ -2,7 +2,6 @@
 
 namespace MrBytesized\PelicanModManager\Filament\Server\Pages;
 
-use App\Filament\Server\Resources\Files\Pages\ListFiles;
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
 use App\Traits\Filament\BlockAccessInConflict;

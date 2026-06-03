@@ -2,7 +2,6 @@
 
 namespace MrBytesized\PelicanModManager\Support;
 
-use App\Filament\Server\Resources\Files\Pages\ListFiles;
 use App\Models\Server;
 use Closure;
 use Exception;
@@ -434,7 +433,9 @@ class PelicanModManagerTableBuilder
                         /** @var Server $server */
                         $server = Filament::getTenant();
                         $modType = ModrinthProjectType::fromServer($server);
-                        $showFileUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
+                        $showFileUrl = $modType
+                            ? e(url('/server/' . rawurlencode((string) $server->getRouteKey()) . '/files') . '?path=' . rawurlencode($modType->getFolder()))
+                            : '#';
 
                         // Check if this mod has an update available
                         $hasModUpdate = !$isLocal && isset($this->installedUpdateProjectIds[$record['project_id'] ?? '']);

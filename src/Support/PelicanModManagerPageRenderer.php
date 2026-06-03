@@ -867,6 +867,7 @@ class PelicanModManagerPageRenderer
                 const controller = {
                     version: 3,
                     selected: [],
+                    updateCheckStarted: false,
                     getBars() {
                         return Array.from(document.querySelectorAll('[data-pmm-selection-bar]'));
                     },
@@ -909,12 +910,9 @@ class PelicanModManagerPageRenderer
                             if (id && !ids.includes(id)) ids.push(id);
                         });
 
-                        let fallback = null;
                         for (const id of ids) {
                             const component = livewire.find(id);
                             if (!component) continue;
-
-                            fallback ??= component;
 
                             const data = component.canonical || component.ephemeral || component.serverMemo?.data || component.snapshot?.data || {};
                             if (
@@ -926,7 +924,7 @@ class PelicanModManagerPageRenderer
                             }
                         }
 
-                        return fallback;
+                        return null;
                     },
                     call(bar, method, ...args) {
                         const component = this.getWire(bar);
@@ -939,6 +937,27 @@ class PelicanModManagerPageRenderer
                             console.error('Pelican Mod Manager selection action failed', method, error);
                             return null;
                         });
+                    },
+                    scheduleUpdateCheck() {
+                        if (this.updateCheckStarted) return;
+
+                        const bar = this.getBars()[0] || null;
+                        const component = this.getWire(bar);
+                        if (!component) {
+                            window.setTimeout(() => this.scheduleUpdateCheck(), 150);
+                            return;
+                        }
+
+                        const data = component.canonical || component.ephemeral || component.serverMemo?.data || component.snapshot?.data || {};
+                        if (!Object.prototype.hasOwnProperty.call(data, 'installedEnriched')) {
+                            window.setTimeout(() => this.scheduleUpdateCheck(), 150);
+                            return;
+                        }
+
+                        if (data.installedEnriched) return;
+
+                        this.updateCheckStarted = true;
+                        window.setTimeout(() => this.call(bar, 'checkInstalledUpdates'), 75);
                     },
                     fireEvent(bar, event, payload = {}) {
                         const component = this.getWire(bar);
@@ -1163,7 +1182,10 @@ class PelicanModManagerPageRenderer
 
                 window.pmmSelectionBarController = controller;
                 controller.bind();
-                window.requestAnimationFrame(() => controller.refresh());
+                window.requestAnimationFrame(() => {
+                    controller.refresh();
+                    controller.scheduleUpdateCheck();
+                });
             })();
         JS;
         };
@@ -1259,10 +1281,6 @@ class PelicanModManagerPageRenderer
         $modType  = ModrinthProjectType::fromServer($server);
         $folderUrl = $modType ? e(ListFiles::getUrl(['path' => $modType->getFolder()])) : '#';
 
-        // ── Lazy update-check trigger — fires once after render, uses server-side cache ──
-        // Uses the public installedUpdatesChecked flag to avoid redundant AJAX after first check.
-        $lazyCheck = "<div x-data x-init=\"\$nextTick(() => { if (!\$wire.installedEnriched) \$wire.call('checkInstalledUpdates'); })\" style='display:none'></div>";
-
         // ── Row 1: search input (left, wide) + Open folder + Upload files (right) ──
         $searchSvg = "<svg style='position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#6b7280;flex-shrink:0;pointer-events:none;' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/></svg>";
         $searchInput = "<div style='flex:1;position:relative;'>"
@@ -1354,7 +1372,7 @@ class PelicanModManagerPageRenderer
             . "<div style='display:flex;gap:8px;align-items:center;'>{$rightBtns}</div>"
             . "</div>";
 
-        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$lazyCheck}{$row1}{$row2}</div>";
+        return "<div class='pmm-filter-bar' style='padding:0 0 8px 0;'>{$row1}{$row2}</div>";
         };
     }
 

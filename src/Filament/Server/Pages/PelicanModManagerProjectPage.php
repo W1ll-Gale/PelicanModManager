@@ -1481,66 +1481,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         cache()->put("pmm_update_project_ids_{$server->uuid}", array_keys($this->installedUpdateProjectIds), now()->addMinutes(5));
         cache()->put("pmm_has_updates_{$server->uuid}", $this->installedHasUpdates, now()->addMinutes(5));
 
-        $metadata = [
-            'project_id' => $projectId,
-            'project_slug' => $record['slug'] ?? ($installedMod['project_slug'] ?? ''),
-            'project_title' => $record['title'] ?? ($installedMod['project_title'] ?? $projectId),
-            'version_id' => $versionData['id'] ?? '',
-            'version_number' => $versionData['version_number'] ?? '',
-            'filename' => $filename,
-            'installed_at' => now()->toIso8601String(),
-        ];
-        if (($record['author'] ?? ($installedMod['author'] ?? null)) !== null) {
-            $metadata['author'] = $record['author'] ?? $installedMod['author'];
-        }
-
-        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
-            $cacheKey = $prefix . $server->uuid;
-            $cachedItems = cache()->get($cacheKey);
-            if (!is_array($cachedItems)) continue;
-
-            $found = false;
-            $cachedItems = array_map(function (array $item) use (&$found, $projectId, $filename, $metadata, $versionData, $record) {
-                if (($item['project_id'] ?? null) !== $projectId) {
-                    return $item;
-                }
-
-                $found = true;
-                $item['filename'] = $filename;
-                $item['is_disabled'] = false;
-                $item['is_local'] = false;
-                $item['metadata'] = $metadata;
-                $item['version_number'] = $versionData['version_number'] ?? ($item['version_number'] ?? '');
-                $item['slug'] = $metadata['project_slug'];
-                $item['title'] = $metadata['project_title'];
-                $item['author'] = $record['author'] ?? ($metadata['author'] ?? ($item['author'] ?? ''));
-
-                return $item;
-            }, $cachedItems);
-
-            if (!$found) {
-                $cachedItems[] = [
-                    'project_id' => $projectId,
-                    'slug' => $metadata['project_slug'],
-                    'title' => $metadata['project_title'],
-                    'filename' => $filename,
-                    'installed_at' => $metadata['installed_at'],
-                    'author' => $metadata['author'] ?? ($record['author'] ?? ''),
-                    'author_avatar' => null,
-                    'icon_url' => $record['icon_url'] ?? null,
-                    'project_type' => $record['project_type'] ?? 'mod',
-                    'is_local' => false,
-                    'is_disabled' => false,
-                    'metadata' => $metadata,
-                ];
-            }
-
-            cache()->put($cacheKey, array_values($cachedItems), now()->addMinutes(5));
-        }
-
-        $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid, []);
-        $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
-            ->contains(fn ($item) => !empty($item['is_disabled']));
+        $stats = app(InstalledModsService::class)->patchAfterInstallOrUpdate($server, $record, $versionData, $filename, $installedMod);
+        $this->installedHasDisabled = $stats['has_disabled'] ?? false;
         if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
             $this->installedStatusFilter = 'all';
         }
@@ -3292,45 +3234,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
             $this->invalidateMetadataCache();
 
-            foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
-                $cacheKey = $prefix . $server->uuid;
-                $cachedItems = cache()->get($cacheKey);
-                if (!is_array($cachedItems)) continue;
-
-                $cachedItems = array_map(function (array $item) use ($updates) {
-                    foreach ($updates as $update) {
-                        $sameProject = ($item['project_id'] ?? null) === $update['project_id'];
-                        $sameFile = strcasecmp($item['filename'] ?? '', $update['old_filename']) === 0;
-                        if (!$sameProject && !$sameFile) {
-                            continue;
-                        }
-
-                        $item['filename'] = $update['new_filename'];
-                        $item['is_disabled'] = $update['is_disabled'];
-                        if (str_starts_with($update['project_id'], 'local_')) {
-                            $cleanFilename = str_replace('.disabled', '', $update['new_filename']);
-                            $item['project_id'] = 'local_' . md5($update['new_filename']);
-                            $item['title'] = basename($cleanFilename, '.jar');
-                        }
-                        if (isset($item['metadata']) && is_array($item['metadata'])) {
-                            $item['metadata']['filename'] = $update['new_filename'];
-                        }
-
-                        break;
-                    }
-
-                    return $item;
-                }, $cachedItems);
-
-                cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
-            }
-
-            $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid);
-            if (!is_array($resolvedItems)) {
-                $resolvedItems = cache()->get("pmm_basic_installed_{$server->uuid}", []);
-            }
-            $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
-                ->contains(fn ($item) => !empty($item['is_disabled']));
+            $stats = app(InstalledModsService::class)->patchEnabledStateInCaches($server, $updates);
+            $this->installedHasDisabled = $stats['has_disabled'] ?? false;
             if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
                 $this->installedStatusFilter = 'all';
             }
@@ -3697,40 +3602,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
             $this->invalidateMetadataCache();
             $this->versionsCache = [];
 
-            foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
-                $cacheKey = $prefix . $server->uuid;
-                $cachedItems = cache()->get($cacheKey);
-                if (!is_array($cachedItems)) continue;
-
-                $cachedItems = array_map(function (array $item) use ($projectId, $oldFilename, $newFilename, $currentlyEnabled) {
-                    $sameProject = ($item['project_id'] ?? null) === $projectId;
-                    $sameFile = strcasecmp($item['filename'] ?? '', $oldFilename) === 0;
-                    if (!$sameProject && !$sameFile) {
-                        return $item;
-                    }
-
-                    $item['filename'] = $newFilename;
-                    $item['is_disabled'] = $currentlyEnabled;
-                    if (str_starts_with($projectId, 'local_')) {
-                        $cleanFilename = str_replace('.disabled', '', $newFilename);
-                        $item['project_id'] = 'local_' . md5($newFilename);
-                        $item['title'] = basename($cleanFilename, '.jar');
-                    }
-                    if (isset($item['metadata']) && is_array($item['metadata'])) {
-                        $item['metadata']['filename'] = $newFilename;
-                    }
-
-                    return $item;
-                }, $cachedItems);
-
-                cache()->put($cacheKey, $cachedItems, now()->addMinutes(5));
-            }
-            $resolvedItems = cache()->get("modrinth_installed_resolved_list_" . $server->uuid);
-            if (!is_array($resolvedItems)) {
-                $resolvedItems = cache()->get("pmm_basic_installed_{$server->uuid}", []);
-            }
-            $this->installedHasDisabled = collect(is_array($resolvedItems) ? $resolvedItems : [])
-                ->contains(fn ($item) => !empty($item['is_disabled']));
+            $stats = app(InstalledModsService::class)->patchEnabledStateInCaches($server, [[
+                'project_id' => $projectId,
+                'old_filename' => $oldFilename,
+                'new_filename' => $newFilename,
+                'is_disabled' => $currentlyEnabled,
+            ]]);
+            $this->installedHasDisabled = $stats['has_disabled'] ?? false;
             if (!$this->installedHasDisabled && in_array($this->installedStatusFilter, ['enabled', 'disabled'], true)) {
                 $this->installedStatusFilter = 'all';
             }

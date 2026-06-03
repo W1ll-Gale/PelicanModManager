@@ -139,6 +139,132 @@ class InstalledModsService
     }
 
     /**
+     * @param array<string, mixed> $record
+     * @param array<string, mixed> $versionData
+     * @param array<string, mixed>|null $installedMod
+     */
+    public function patchAfterInstallOrUpdate(
+        Server $server,
+        array $record,
+        array $versionData,
+        string $filename,
+        ?array $installedMod = null
+    ): array {
+        $projectId = $record['project_id'] ?? null;
+        if (!$projectId) {
+            return $this->cacheStats($server);
+        }
+
+        $metadata = [
+            'project_id' => $projectId,
+            'project_slug' => $record['slug'] ?? ($installedMod['project_slug'] ?? ''),
+            'project_title' => $record['title'] ?? ($installedMod['project_title'] ?? $projectId),
+            'version_id' => $versionData['id'] ?? '',
+            'version_number' => $versionData['version_number'] ?? '',
+            'filename' => $filename,
+            'installed_at' => now()->toIso8601String(),
+        ];
+        if (($record['author'] ?? ($installedMod['author'] ?? null)) !== null) {
+            $metadata['author'] = $record['author'] ?? $installedMod['author'];
+        }
+
+        foreach ($this->installedListCachePrefixes() as $prefix) {
+            $cacheKey = $prefix . $server->uuid;
+            $cachedItems = cache()->get($cacheKey);
+            if (!is_array($cachedItems)) {
+                continue;
+            }
+
+            $found = false;
+            $cachedItems = array_map(function (array $item) use (&$found, $projectId, $filename, $metadata, $versionData, $record) {
+                if (($item['project_id'] ?? null) !== $projectId) {
+                    return $item;
+                }
+
+                $found = true;
+                $item['filename'] = $filename;
+                $item['is_disabled'] = false;
+                $item['is_local'] = false;
+                $item['metadata'] = $metadata;
+                $item['version_number'] = $versionData['version_number'] ?? ($item['version_number'] ?? '');
+                $item['slug'] = $metadata['project_slug'];
+                $item['title'] = $metadata['project_title'];
+                $item['author'] = $record['author'] ?? ($metadata['author'] ?? ($item['author'] ?? ''));
+
+                return $item;
+            }, $cachedItems);
+
+            if (!$found) {
+                $cachedItems[] = [
+                    'project_id' => $projectId,
+                    'slug' => $metadata['project_slug'],
+                    'title' => $metadata['project_title'],
+                    'filename' => $filename,
+                    'installed_at' => $metadata['installed_at'],
+                    'author' => $metadata['author'] ?? ($record['author'] ?? ''),
+                    'author_avatar' => null,
+                    'icon_url' => $record['icon_url'] ?? null,
+                    'project_type' => $record['project_type'] ?? 'mod',
+                    'is_local' => false,
+                    'is_disabled' => false,
+                    'metadata' => $metadata,
+                ];
+            }
+
+            cache()->put($cacheKey, array_values($cachedItems), now()->addMinutes($this->cacheMinutes('installed_lists', 5)));
+        }
+
+        return $this->cacheStats($server);
+    }
+
+    /**
+     * @param array<int, array{project_id: string, old_filename: string, new_filename: string, is_disabled: bool}> $updates
+     */
+    public function patchEnabledStateInCaches(Server $server, array $updates): array
+    {
+        if (empty($updates)) {
+            return $this->cacheStats($server);
+        }
+
+        foreach ($this->installedListCachePrefixes() as $prefix) {
+            $cacheKey = $prefix . $server->uuid;
+            $cachedItems = cache()->get($cacheKey);
+            if (!is_array($cachedItems)) {
+                continue;
+            }
+
+            $cachedItems = array_map(function (array $item) use ($updates) {
+                foreach ($updates as $update) {
+                    $sameProject = ($item['project_id'] ?? null) === $update['project_id'];
+                    $sameFile = strcasecmp($item['filename'] ?? '', $update['old_filename']) === 0;
+                    if (!$sameProject && !$sameFile) {
+                        continue;
+                    }
+
+                    $item['filename'] = $update['new_filename'];
+                    $item['is_disabled'] = $update['is_disabled'];
+                    if (str_starts_with($update['project_id'], 'local_')) {
+                        $cleanFilename = str_replace('.disabled', '', $update['new_filename']);
+                        $item['project_id'] = 'local_' . md5($update['new_filename']);
+                        $item['title'] = basename($cleanFilename, '.jar');
+                    }
+                    if (isset($item['metadata']) && is_array($item['metadata'])) {
+                        $item['metadata']['filename'] = $update['new_filename'];
+                    }
+
+                    break;
+                }
+
+                return $item;
+            }, $cachedItems);
+
+            cache()->put($cacheKey, $cachedItems, now()->addMinutes($this->cacheMinutes('installed_lists', 5)));
+        }
+
+        return $this->cacheStats($server);
+    }
+
+    /**
      * @param string[] $projectIds
      * @param string[] $filenames
      */
@@ -147,7 +273,7 @@ class InstalledModsService
         $projectIds = array_values(array_filter($projectIds));
         $filenames = array_map(fn ($filename) => strtolower(str_replace('.disabled', '', $filename)), array_filter($filenames));
 
-        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+        foreach ($this->installedListCachePrefixes() as $prefix) {
             $cacheKey = $prefix . $server->uuid;
             $cachedItems = cache()->get($cacheKey);
             if (!is_array($cachedItems)) {
@@ -173,7 +299,7 @@ class InstalledModsService
         $row = $this->localRecord($filename, $type, now()->toIso8601String());
         $normalizedFilename = strtolower(str_replace('.disabled', '', $filename));
 
-        foreach (["modrinth_installed_resolved_list_", "pmm_basic_installed_"] as $prefix) {
+        foreach ($this->installedListCachePrefixes() as $prefix) {
             $cacheKey = $prefix . $server->uuid;
             $cachedItems = cache()->get($cacheKey);
             if (!is_array($cachedItems)) {
@@ -285,5 +411,11 @@ class InstalledModsService
     protected function cacheMinutes(string $key, int $default): int
     {
         return (int) config("pelican-mod-manager.cache.{$key}_minutes", $default);
+    }
+
+    /** @return string[] */
+    protected function installedListCachePrefixes(): array
+    {
+        return ["modrinth_installed_resolved_list_", "pmm_basic_installed_"];
     }
 }

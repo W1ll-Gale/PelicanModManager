@@ -696,6 +696,26 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                     box-shadow: none !important;
                 }
 
+                .fi-ta-row.pmm-selection-cleared,
+                .fi-ta-row.pmm-selection-cleared > td,
+                .fi-ta-row.pmm-selection-cleared > td::before,
+                .fi-ta-row.pmm-selection-cleared > .fi-ta-selection-cell::before,
+                .fi-ta-row.pmm-selection-cleared .fi-ta-selection-cell::before {
+                    --tw-ring-color: transparent !important;
+                    --tw-ring-shadow: 0 0 #0000 !important;
+                    box-shadow: none !important;
+                    outline: none !important;
+                }
+
+                .fi-ta-row.pmm-selection-cleared > td::before,
+                .fi-ta-row.pmm-selection-cleared > .fi-ta-selection-cell::before,
+                .fi-ta-row.pmm-selection-cleared .fi-ta-selection-cell::before {
+                    display: none !important;
+                    opacity: 0 !important;
+                    background: transparent !important;
+                    border-color: transparent !important;
+                }
+
                 .pmm-selection-bar {
                     position: fixed;
                     left: 50%;
@@ -4359,6 +4379,9 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                             const row = box.closest('.fi-ta-row, tr');
                             if (!row) return;
 
+                            row.classList.remove('fi-selected');
+                            row.classList.add('pmm-selection-cleared');
+                            row.querySelectorAll('.fi-selected').forEach((node) => node.classList.remove('fi-selected'));
                             row.classList.toggle('pmm-row-disabled', !enabled);
                             row.style.filter = enabled ? '' : 'grayscale(1)';
                             row.style.opacity = enabled ? '' : '0.45';
@@ -4384,6 +4407,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                             box.checked = false;
                             box.indeterminate = false;
+                            box.removeAttribute('checked');
+                            box.setAttribute('aria-checked', 'false');
                             box.blur();
                             box.dispatchEvent(new Event('change', { bubbles: true }));
                         });
@@ -4391,6 +4416,8 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                         document.querySelectorAll('.fi-ta thead input[type=checkbox]:checked, .fi-ta thead input[type=checkbox]').forEach((box) => {
                             box.checked = false;
                             box.indeterminate = false;
+                            box.removeAttribute('checked');
+                            box.setAttribute('aria-checked', 'false');
                             box.blur();
                             box.dispatchEvent(new Event('change', { bubbles: true }));
                         });
@@ -4404,6 +4431,10 @@ class PelicanModManagerProjectPage extends Page implements HasTable
 
                         document.addEventListener('change', (event) => {
                             if (event.target?.matches?.('.fi-ta input[type=checkbox]')) {
+                                const row = event.target.closest('.fi-ta-row, tr');
+                                if (event.target.checked) {
+                                    row?.classList.remove('pmm-selection-cleared');
+                                }
                                 window.requestAnimationFrame(() => this.refresh());
                             }
                         });
@@ -4446,8 +4477,13 @@ class PelicanModManagerProjectPage extends Page implements HasTable
                                 this.call(bar, 'clearInstalledSelection');
                                 this.call(bar, 'setInstalledBulkSelection', '[]');
                                 document.querySelectorAll('.fi-ta input[type=checkbox]:checked, .fi-ta input[type=checkbox]').forEach((box) => {
+                                    const row = box.closest('.fi-ta-row, tr');
+                                    row?.classList.remove('fi-selected');
+                                    row?.classList.add('pmm-selection-cleared');
                                     box.checked = false;
                                     box.indeterminate = false;
+                                    box.removeAttribute('checked');
+                                    box.setAttribute('aria-checked', 'false');
                                     box.blur();
                                     box.dispatchEvent(new Event('change', { bubbles: true }));
                                 });

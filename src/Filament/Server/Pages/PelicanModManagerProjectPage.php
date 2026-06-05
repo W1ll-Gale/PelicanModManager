@@ -37,7 +37,15 @@ use Illuminate\Support\HtmlString;
 class PelicanModManagerProjectPage extends Page implements HasTable
 {
     use BlockAccessInConflict;
-    use HandlesInstalledBulkActions;
+    use HandlesInstalledBulkActions {
+        clearInstalledSelection as protected handleClearInstalledSelection;
+        uninstallSelectedInstalledMods as protected handleUninstallSelectedInstalledMods;
+        uninstallInstalledModsByIds as protected handleUninstallInstalledModsByIds;
+        setSelectedInstalledModsEnabled as protected handleSetSelectedInstalledModsEnabled;
+        prepareSelectedModpackExport as protected handlePrepareSelectedModpackExport;
+        exportSelectedModpack as protected handleExportSelectedModpack;
+        setInstalledBulkSelection as protected handleSetInstalledBulkSelection;
+    }
     use HasTabs;
     use InteractsWithTable;
 
@@ -737,6 +745,50 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $url = addslashes('https://modrinth.com/' . $projectType . '/' . $slug);
         $this->js("navigator.clipboard.writeText('{$url}')");
         Notification::make()->title('Link copied!')->success()->send();
+    }
+
+    public function clearInstalledSelection(): void
+    {
+        $this->handleClearInstalledSelection();
+    }
+
+    public function uninstallSelectedInstalledMods(): void
+    {
+        $this->handleUninstallSelectedInstalledMods();
+    }
+
+    /**
+     * @param string[] $ids
+     */
+    public function uninstallInstalledModsByIds(array $ids): void
+    {
+        $this->handleUninstallInstalledModsByIds($ids);
+    }
+
+    /**
+     * @param string[] $ids
+     */
+    public function setSelectedInstalledModsEnabled(array $ids, bool $enabled): void
+    {
+        $this->handleSetSelectedInstalledModsEnabled($ids, $enabled);
+    }
+
+    public function prepareSelectedModpackExport(): void
+    {
+        $this->handlePrepareSelectedModpackExport();
+    }
+
+    /**
+     * @param string[] $ids
+     */
+    public function exportSelectedModpack(array $ids): mixed
+    {
+        return $this->handleExportSelectedModpack($ids);
+    }
+
+    public function setInstalledBulkSelection(string $idsJson): void
+    {
+        $this->handleSetInstalledBulkSelection($idsJson);
     }
 
     public function installMod(string $projectId, string $slug = '', string $title = '', string $author = ''): void

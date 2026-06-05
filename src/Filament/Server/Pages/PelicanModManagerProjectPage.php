@@ -37,15 +37,7 @@ use Illuminate\Support\HtmlString;
 class PelicanModManagerProjectPage extends Page implements HasTable
 {
     use BlockAccessInConflict;
-    use HandlesInstalledBulkActions {
-        clearInstalledSelection as protected handleClearInstalledSelection;
-        uninstallSelectedInstalledMods as protected handleUninstallSelectedInstalledMods;
-        uninstallInstalledModsByIds as protected handleUninstallInstalledModsByIds;
-        setSelectedInstalledModsEnabled as protected handleSetSelectedInstalledModsEnabled;
-        prepareSelectedModpackExport as protected handlePrepareSelectedModpackExport;
-        exportSelectedModpack as protected handleExportSelectedModpack;
-        setInstalledBulkSelection as protected handleSetInstalledBulkSelection;
-    }
+    use HandlesInstalledBulkActions;
     use HasTabs;
     use InteractsWithTable;
 

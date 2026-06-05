@@ -16,7 +16,7 @@ use MrBytesized\PelicanModManager\Services\ModManagerFileService;
 
 trait HandlesInstalledBulkActions
 {
-    public function clearInstalledSelection(): void
+    protected function handleClearInstalledSelection(): void
     {
         $this->installedBulkSelectionJson = '[]';
         $this->exportModpackProjectIds = [];
@@ -29,7 +29,7 @@ trait HandlesInstalledBulkActions
         $this->selectedTableRecords = [];
     }
 
-    public function uninstallSelectedInstalledMods(): void
+    protected function handleUninstallSelectedInstalledMods(): void
     {
         try {
             $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
@@ -52,7 +52,7 @@ trait HandlesInstalledBulkActions
     /**
      * @param string[] $ids
      */
-    public function uninstallInstalledModsByIds(array $ids): void
+    protected function handleUninstallInstalledModsByIds(array $ids): void
     {
         try {
             $records = $this->getInstalledRecordsByIds($ids);
@@ -75,7 +75,7 @@ trait HandlesInstalledBulkActions
     /**
      * @param string[] $ids
      */
-    public function setSelectedInstalledModsEnabled(array $ids, bool $enabled): void
+    protected function handleSetSelectedInstalledModsEnabled(array $ids, bool $enabled): void
     {
         try {
             $records = $this->getInstalledRecordsByIds($ids);
@@ -183,7 +183,7 @@ trait HandlesInstalledBulkActions
         }
     }
 
-    public function prepareSelectedModpackExport(): void
+    protected function handlePrepareSelectedModpackExport(): void
     {
         try {
             $records = $this->getInstalledRecordsByIds($this->getInstalledBulkSelectionIds());
@@ -207,7 +207,7 @@ trait HandlesInstalledBulkActions
     /**
      * @param string[] $ids
      */
-    public function exportSelectedModpack(array $ids): mixed
+    protected function handleExportSelectedModpack(array $ids): mixed
     {
         $this->exportModpackProjectIds = collect($ids)
             ->filter(fn ($id) => is_string($id) && $id !== '')
@@ -218,7 +218,7 @@ trait HandlesInstalledBulkActions
         return $this->mountAction('export_modpack');
     }
 
-    public function setInstalledBulkSelection(string $idsJson): void
+    protected function handleSetInstalledBulkSelection(string $idsJson): void
     {
         $this->installedBulkSelectionJson = $idsJson;
     }

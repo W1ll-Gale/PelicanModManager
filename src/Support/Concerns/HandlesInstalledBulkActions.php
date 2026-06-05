@@ -20,13 +20,11 @@ trait HandlesInstalledBulkActions
     {
         $this->installedBulkSelectionJson = '[]';
         $this->exportModpackProjectIds = [];
+        $this->selectedTableRecords = [];
 
         if (method_exists($this, 'deselectAllTableRecords')) {
             $this->deselectAllTableRecords();
-            return;
         }
-
-        $this->selectedTableRecords = [];
     }
 
     protected function handleUninstallSelectedInstalledMods(): void
@@ -55,6 +53,11 @@ trait HandlesInstalledBulkActions
     protected function handleUninstallInstalledModsByIds(array $ids): void
     {
         try {
+            $ids = $this->normalizeInstalledSelectionIds($ids);
+            if (empty($ids)) {
+                $ids = $this->getInstalledBulkSelectionIds();
+            }
+
             $records = $this->getInstalledRecordsByIds($ids);
 
             if ($records->isEmpty()) {
@@ -78,6 +81,11 @@ trait HandlesInstalledBulkActions
     protected function handleSetSelectedInstalledModsEnabled(array $ids, bool $enabled): void
     {
         try {
+            $ids = $this->normalizeInstalledSelectionIds($ids);
+            if (empty($ids)) {
+                $ids = $this->getInstalledBulkSelectionIds();
+            }
+
             $records = $this->getInstalledRecordsByIds($ids);
 
             if ($records->isEmpty()) {
@@ -209,9 +217,15 @@ trait HandlesInstalledBulkActions
      */
     protected function handleExportSelectedModpack(array $ids): mixed
     {
-        $this->exportModpackProjectIds = collect($ids)
-            ->filter(fn ($id) => is_string($id) && $id !== '')
-            ->unique()
+        $ids = $this->normalizeInstalledSelectionIds($ids);
+        if (empty($ids)) {
+            $ids = $this->getInstalledBulkSelectionIds();
+        }
+
+        $records = $this->getInstalledRecordsByIds($ids);
+        $this->exportModpackProjectIds = $records
+            ->pluck('project_id')
+            ->filter()
             ->values()
             ->toArray();
 
@@ -220,7 +234,10 @@ trait HandlesInstalledBulkActions
 
     protected function handleSetInstalledBulkSelection(string $idsJson): void
     {
-        $this->installedBulkSelectionJson = $idsJson;
+        $decoded = json_decode($idsJson, true);
+        $this->installedBulkSelectionJson = json_encode(
+            $this->normalizeInstalledSelectionIds(is_array($decoded) ? $decoded : [])
+        ) ?: '[]';
     }
 
     /** @return string[] */
@@ -231,8 +248,19 @@ trait HandlesInstalledBulkActions
             return [];
         }
 
-        return collect($decoded)
-            ->filter(fn ($id) => is_string($id) && $id !== '')
+        return $this->normalizeInstalledSelectionIds($decoded);
+    }
+
+    /**
+     * @param mixed[] $ids
+     * @return string[]
+     */
+    protected function normalizeInstalledSelectionIds(array $ids): array
+    {
+        return collect($ids)
+            ->filter(fn ($id) => is_string($id) || is_numeric($id))
+            ->map(fn ($id) => trim((string) $id))
+            ->filter(fn (string $id) => $id !== '' && $id !== 'on')
             ->unique()
             ->values()
             ->toArray();
@@ -257,6 +285,7 @@ trait HandlesInstalledBulkActions
      */
     protected function getInstalledRecordsByIds(array $ids): \Illuminate\Support\Collection
     {
+        $ids = $this->normalizeInstalledSelectionIds($ids);
         if (empty($ids)) {
             return collect();
         }
@@ -282,8 +311,18 @@ trait HandlesInstalledBulkActions
             $records = collect($this->getInstalledModsResolvedList($server, $type));
         }
 
+        $idSet = array_fill_keys($ids, true);
+
         return $records
-            ->filter(fn ($record) => in_array($record['project_id'] ?? '', $ids, true))
+            ->filter(function ($record) use ($idSet) {
+                $projectId = (string) ($record['project_id'] ?? '');
+                $filename = (string) ($record['filename'] ?? '');
+                $cleanFilename = preg_replace('/\.disabled$/i', '', $filename) ?: $filename;
+
+                return ($projectId !== '' && isset($idSet[$projectId]))
+                    || ($filename !== '' && isset($idSet[$filename]))
+                    || ($cleanFilename !== '' && isset($idSet[$cleanFilename]));
+            })
             ->values();
     }
 

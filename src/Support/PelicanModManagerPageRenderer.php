@@ -1123,8 +1123,9 @@ class PelicanModManagerPageRenderer
                             if (shareFormat) {
                                 event.preventDefault();
                                 if (shareFormat === 'export') {
+                                    const selected = [...this.selected];
                                     this.setMenuOpen(bar, false);
-                                    this.call(bar, 'exportSelectedModpack', this.selected);
+                                    this.call(bar, 'exportSelectedModpack', selected);
                                     return;
                                 }
 
@@ -1172,7 +1173,8 @@ class PelicanModManagerPageRenderer
                             }
 
                             if (action === 'delete' && confirm('Uninstall selected mods?')) {
-                                this.call(bar, 'uninstallInstalledModsByIds', this.selected);
+                                const selected = [...this.selected];
+                                this.call(bar, 'uninstallInstalledModsByIds', selected);
                             }
                         });
 
@@ -1204,16 +1206,27 @@ class PelicanModManagerPageRenderer
             ? cache()->get("modrinth_installed_resolved_list_" . $server->uuid, $this->getMetadataOnlyList())
             : $this->getMetadataOnlyList();
         $itemMap = collect(is_array($items) ? $items : [])
-            ->mapWithKeys(fn ($item) => [
-                (string)($item['project_id'] ?? '') => [
+            ->flatMap(function ($item) {
+                $filename = (string)($item['filename'] ?? '');
+                $payload = [
                     'title' => $item['title'] ?? 'Selected mod',
-                    'filename' => $item['filename'] ?? '',
+                    'filename' => $filename,
                     'slug' => $item['slug'] ?? '',
                     'project_type' => $item['project_type'] ?? 'mod',
                     'is_disabled' => !empty($item['is_disabled']),
                     'is_local' => !empty($item['is_local']),
-                ],
-            ])
+                ];
+
+                return collect([
+                    (string)($item['project_id'] ?? ''),
+                    $filename,
+                    preg_replace('/\.disabled$/i', '', $filename) ?: '',
+                ])
+                    ->filter()
+                    ->unique()
+                    ->mapWithKeys(fn ($key) => [$key => $payload])
+                    ->all();
+            })
             ->filter(fn ($item, $key) => $key !== '')
             ->toArray();
         $itemsJson = base64_encode(json_encode($itemMap) ?: '{}');

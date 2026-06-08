@@ -1004,6 +1004,26 @@ class PelicanModManagerPageRenderer
                         return Array.from(document.querySelectorAll('.fi-ta input[type=checkbox]:checked'))
                             .filter((box) => !box.closest('thead'));
                     },
+                    getSelectedActionIds() {
+                        const ids = [];
+
+                        this.getSelectedBoxes().forEach((box) => {
+                            const row = box.closest('.fi-ta-row, tr');
+                            const toggle = row?.querySelector?.('.pmm-toggle-switch');
+
+                            [
+                                box.value || box.getAttribute('value') || '',
+                                toggle?.dataset?.pmmProjectId || '',
+                                toggle?.dataset?.pmmFilename || '',
+                            ].forEach((value) => {
+                                if (value && value !== 'on' && !ids.includes(value)) {
+                                    ids.push(value);
+                                }
+                            });
+                        });
+
+                        return ids;
+                    },
                     refresh() {
                         this.selected = this.getSelectedIds();
                         const count = this.selected.length;
@@ -1081,7 +1101,6 @@ class PelicanModManagerPageRenderer
                             box.removeAttribute('checked');
                             box.setAttribute('aria-checked', 'false');
                             box.blur();
-                            box.dispatchEvent(new Event('change', { bubbles: true }));
                         });
 
                         document.querySelectorAll('.fi-ta thead input[type=checkbox]:checked, .fi-ta thead input[type=checkbox]').forEach((box) => {
@@ -1090,7 +1109,6 @@ class PelicanModManagerPageRenderer
                             box.removeAttribute('checked');
                             box.setAttribute('aria-checked', 'false');
                             box.blur();
-                            box.dispatchEvent(new Event('change', { bubbles: true }));
                         });
 
                         this.selected = [];
@@ -1123,7 +1141,7 @@ class PelicanModManagerPageRenderer
                             if (shareFormat) {
                                 event.preventDefault();
                                 if (shareFormat === 'export') {
-                                    const selected = [...this.selected];
+                                    const selected = this.getSelectedActionIds();
                                     this.setMenuOpen(bar, false);
                                     this.call(bar, 'exportSelectedModpack', selected);
                                     return;
@@ -1165,15 +1183,15 @@ class PelicanModManagerPageRenderer
 
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
-                                const selected = [...this.selected];
+                                const selected = this.getSelectedActionIds();
+                                this.call(bar, 'setSelectedInstalledModsEnabled', selected, enabled);
                                 this.markSelected(bar, enabled);
                                 this.applyBulkVisualState(enabled);
-                                this.call(bar, 'setSelectedInstalledModsEnabled', selected, enabled);
                                 return;
                             }
 
                             if (action === 'delete' && confirm('Uninstall selected mods?')) {
-                                const selected = [...this.selected];
+                                const selected = this.getSelectedActionIds();
                                 this.call(bar, 'uninstallInstalledModsByIds', selected);
                             }
                         });

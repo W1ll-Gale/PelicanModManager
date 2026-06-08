@@ -928,9 +928,22 @@ class PelicanModManagerPageRenderer
                     call(bar, method, ...args) {
                         const component = this.getWire(bar);
                         if (!component) return Promise.resolve(null);
-                        const promise = typeof component.call === 'function'
-                            ? component.call(method, ...args)
-                            : (typeof component.$wire?.$call === 'function' ? component.$wire.$call(method, ...args) : null);
+                        let promise = null;
+
+                        if (typeof component.$wire?.[method] === 'function') {
+                            promise = component.$wire[method](...args);
+                        } else if (typeof component.$wire?.call === 'function') {
+                            promise = component.$wire.call(method, ...args);
+                        } else if (typeof component.$wire?.$call === 'function') {
+                            promise = component.$wire.$call(method, ...args);
+                        } else if (typeof component.call === 'function') {
+                            promise = component.call(method, ...args);
+                        }
+
+                        if (!promise) {
+                            console.warn('Pelican Mod Manager selection action unavailable', method, component);
+                            return Promise.resolve(null);
+                        }
 
                         return Promise.resolve(promise).catch((error) => {
                             console.error('Pelican Mod Manager selection action failed', method, error);
@@ -1023,6 +1036,18 @@ class PelicanModManagerPageRenderer
                         });
 
                         return ids;
+                    },
+                    getSelectedActionRows() {
+                        return this.getSelectedBoxes().map((box) => {
+                            const row = box.closest('.fi-ta-row, tr');
+                            const toggle = row?.querySelector?.('.pmm-toggle-switch');
+
+                            return {
+                                id: box.value || box.getAttribute('value') || '',
+                                project_id: toggle?.dataset?.pmmProjectId || '',
+                                filename: toggle?.dataset?.pmmFilename || '',
+                            };
+                        }).filter((row) => row.id || row.project_id || row.filename);
                     },
                     refresh() {
                         this.selected = this.getSelectedIds();
@@ -1183,8 +1208,8 @@ class PelicanModManagerPageRenderer
 
                             if (action === 'enable' || action === 'disable') {
                                 const enabled = action === 'enable';
-                                const selected = this.getSelectedActionIds();
-                                this.call(bar, 'setSelectedInstalledModsEnabled', selected, enabled);
+                                const selectedRows = this.getSelectedActionRows();
+                                this.call(bar, 'setInstalledModRowsEnabled', selectedRows, enabled);
                                 this.markSelected(bar, enabled);
                                 this.applyBulkVisualState(enabled);
                                 return;

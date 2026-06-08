@@ -191,6 +191,23 @@ trait HandlesInstalledBulkActions
         }
     }
 
+    /**
+     * @param array<int, array{id?: mixed, project_id?: mixed, filename?: mixed}> $rows
+     */
+    protected function handleSetInstalledModRowsEnabled(array $rows, bool $enabled): void
+    {
+        $ids = collect($rows)
+            ->flatMap(fn ($row) => is_array($row) ? [
+                $row['id'] ?? '',
+                $row['project_id'] ?? '',
+                $row['filename'] ?? '',
+            ] : [])
+            ->values()
+            ->toArray();
+
+        $this->handleSetSelectedInstalledModsEnabled($ids, $enabled);
+    }
+
     protected function handlePrepareSelectedModpackExport(): void
     {
         try {

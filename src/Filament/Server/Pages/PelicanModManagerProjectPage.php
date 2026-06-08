@@ -765,6 +765,14 @@ class PelicanModManagerProjectPage extends Page implements HasTable
         $this->handleSetSelectedInstalledModsEnabled($ids, $enabled);
     }
 
+    /**
+     * @param array<int, array{id?: string, project_id?: string, filename?: string}> $rows
+     */
+    public function setInstalledModRowsEnabled(array $rows, bool $enabled): void
+    {
+        $this->handleSetInstalledModRowsEnabled($rows, $enabled);
+    }
+
     public function prepareSelectedModpackExport(): void
     {
         $this->handlePrepareSelectedModpackExport();
